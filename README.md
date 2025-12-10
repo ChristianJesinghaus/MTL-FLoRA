@@ -64,7 +64,7 @@ python federated_mlora.py client \
 
 Each client fine-tunes only the MTL-LoRA parameters locally and exchanges those adapter weights with the server using Flower's FedAvg strategy.
 
-See [FEDERATED_USAGE.md](./FEDERATED_USAGE.md) for integration, smoke-testing, and troubleshooting tips. For a one-command local check (loads `sshleifer/tiny-gpt2`), run `bash script/federated_smoketest.sh`.
+See [FEDERATED_USAGE.md](./FEDERATED_USAGE.md) for integration, smoke-testing, and troubleshooting tips.
 
 ## Acknowledgements
 We gratitude to the following repositories for their wonderful works:

@@ -49,38 +49,11 @@ Wichtig:
 
 Führe einen Syntax-/Import-Check aus, der keine GPUs oder Modelle herunterlädt:
 
-**Option A: Syntax-Check (ohne Download großer Modelle)**
-
 ```bash
 python -m compileall federated_mlora.py src/federated
 ```
 
-So stellst du sicher, dass die Flower-Integration und die Hilfsfunktionen korrekt installiert sind. Eine typische Ausgabe unter Windows/Powershell sieht zum Beispiel so aus und bestätigt, dass alle Dateien erfolgreich kompiliert wurden:
-
-```
-PS C:\Users\Anwender\Desktop\...\MTL-LoRA> python -m compileall federated_mlora.py src/federated
-Compiling 'federated_mlora.py'...
-Listing 'src/federated'...
-Compiling 'src/federated\\__init__.py'...
-Compiling 'src/federated\\client.py'...
-Compiling 'src/federated\\data.py'...
-Compiling 'src/federated\\state.py'...
-Compiling 'src/federated\\training.py'...
-```
-
-**Option B: Mini-Ende-zu-Ende-Lauf (lädt ein winziges HF-Modell)**
-
-1. Stelle sicher, dass deine Umgebung Netzwerkzugriff auf Hugging Face hat.
-2. Starte das bereitgestellte Smoke-Test-Skript. Es lädt `sshleifer/tiny-gpt2`, erzeugt ein kleines JSON-Dataset mit `task_id`-Spalte und führt eine Runde Server/Client-Training aus (Adapter-Targets auf GPT-2 angepasst):
-
-```bash
-bash script/federated_smoketest.sh
-```
-
-Was du erwarten solltest:
-- Im Terminal erscheinen Flower-Logs (Start des Servers, Parameter-Austausch, lokales Training).
-- Am Ende steht `Federated smoke test completed`.
-- Das Skript beendet den Server-Prozess automatisch.
+So stellst du sicher, dass die Flower-Integration und die Hilfsfunktionen korrekt installiert sind.
 
 ## 6) Training überwachen
 
