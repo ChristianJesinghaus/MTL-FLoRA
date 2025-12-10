@@ -45,6 +45,27 @@ The standalone implementation of MTL-LoRA can be found [here](./src/adapter/mlor
 ### Image-Text Undetstanding
 Please follow the instruction [here](./image_text_understanding/README.md).
 
+### Federated MTL-LoRA with Flower
+We provide a minimal Flower setup to orchestrate adapter-only federated training. Start a server and one or more clients:
+
+```bash
+# Terminal 1: start the coordinator
+python federated_mlora.py server --server_address 0.0.0.0:8080 --num_rounds 3
+
+# Terminal 2+: launch clients (each with its own data shard)
+python federated_mlora.py client \
+  --server_address 0.0.0.0:8080 \
+  --base_model <hf-model-name> \
+  --data_path <local_or_hub_dataset> \
+  --adapter_name mlora \
+  --lora_target_modules "('q_proj','k_proj','v_proj','o_proj')" \
+  --batch_size 2 --num_epochs 1 --learning_rate 5e-5
+```
+
+Each client fine-tunes only the MTL-LoRA parameters locally and exchanges those adapter weights with the server using Flower's FedAvg strategy.
+
+See [FEDERATED_USAGE.md](./FEDERATED_USAGE.md) for integration, smoke-testing, and troubleshooting tips. For a one-command local check (loads `sshleifer/tiny-gpt2`), run `bash script/federated_smoketest.sh`.
+
 ## Acknowledgements
 We gratitude to the following repositories for their wonderful works:
 + [LoRA](https://github.com/microsoft/LoRA)

@@ -15,3 +15,4 @@ peft
 datasets
 flash-attn
 transformers
+flwr==1.8.0
