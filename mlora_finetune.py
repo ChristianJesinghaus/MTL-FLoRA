@@ -12,6 +12,10 @@ from src.custom_model import LlamaForCausalLM
 from src.utils import add_filehandler, save_pretrain, set_no_grad, wrap_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer
 
+# Pascal GPUs do not support flash attention kernels; disable them to avoid runtime errors.
+os.environ.setdefault("PYTORCH_SDP_DISABLE_FLASH_ATTENTION", "1")
+os.environ.setdefault("PYTORCH_SDP_DISABLE_MEM_EFFICIENT", "1")
+
 logger = LoggerFactory.create_logger(__name__)
 sys.path.append(os.path.join(os.getcwd(), "~/MTL-LoRA"))
 
@@ -50,6 +54,21 @@ def generate_prompt(data_point):
 
 
 import argparse
+
+
+def _get_preferred_dtype(requested: str = "auto") -> torch.dtype:
+    """Return a torch dtype that is safe for the current hardware."""
+
+    if requested.lower() == "bfloat16":
+        return torch.bfloat16
+    if requested.lower() == "float32":
+        return torch.float32
+
+    if torch.cuda.is_available():
+        major, _ = torch.cuda.get_device_capability()
+        if major >= 8:
+            return torch.bfloat16
+    return torch.float32
 
 
 def arg_parser():
@@ -148,6 +167,13 @@ def arg_parser():
         type=ast.literal_eval,
         default=None,
         help="lora target modules",
+    )
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bfloat16", "float32"],
+        help="Precision to load the model with (auto falls back to fp32 on Pascal GPUs)",
     )
     # mlora hyperparams
     parser.add_argument(
@@ -307,15 +333,16 @@ def train(
 ):
     use_wandb = wandb_project is not None
     add_filehandler(logger, os.path.join(output_dir, "logging"))
+    dtype = _get_preferred_dtype(kwargs.get("dtype", "auto"))
     if "llama" in base_model and adapter_name.lower() in ["mlora", "moelora"]:
         model = LlamaForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             trust_remote_code=True,
         )
 
@@ -455,7 +482,7 @@ def train(
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             weight_decay=weight_decay,
-            bf16=True,
+            bf16=(dtype == torch.bfloat16),
             deepspeed=deepspeed,
             logging_steps=10,
             optim="adamw_torch",

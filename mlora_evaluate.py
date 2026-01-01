@@ -6,6 +6,10 @@ import os
 import re
 import sys
 
+# Pascal GPUs do not support flash attention kernels; disable them to avoid runtime errors.
+os.environ.setdefault("PYTORCH_SDP_DISABLE_FLASH_ATTENTION", "1")
+os.environ.setdefault("PYTORCH_SDP_DISABLE_MEM_EFFICIENT", "1")
+
 import torch
 from src.custom_model import LlamaForCausalLM
 from src.utils import wrap_model
@@ -23,6 +27,26 @@ if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
+
+
+def _get_preferred_dtype(requested: str = "auto") -> torch.dtype:
+    """Return a torch dtype that is safe for the current hardware.
+
+    Pascal GPUs (compute capability 6.x) do not support bfloat16. Default to
+    float32 there and use bfloat16 only when the hardware advertises support.
+    """
+
+    if requested.lower() == "bfloat16":
+        return torch.bfloat16
+    if requested.lower() == "float32":
+        return torch.float32
+
+    # Auto-detect: prefer bfloat16 only if CUDA device reports support.
+    if torch.cuda.is_available():
+        major, _ = torch.cuda.get_device_capability()
+        if major >= 8:  # Ampere or newer
+            return torch.bfloat16
+    return torch.float32
 
 
 task_name_to_id = {
@@ -89,7 +113,13 @@ def main():
                 )
         s = generation_output.sequences
         outputs = tokenizer.batch_decode(s, skip_special_tokens=True)
-        outputs = [o.split("### Response:")[1].strip() for o in outputs]
+        cleaned = []
+        for o in outputs:
+            if "### Response:" in o:
+                cleaned.append(o.split("### Response:", 1)[1].strip())
+            else:
+                cleaned.append(o.strip())
+        outputs = cleaned
         return outputs
 
     save_file = f"experiment/{args.model}-{args.adapter}-{args.dataset}.json"
@@ -98,13 +128,14 @@ def main():
     dataset = load_data(args)
     batches = create_batch(dataset, args.batch_size)
     tokenizer, model = load_model(args)
+    load_dtype = _get_preferred_dtype(args.dtype)
 
     total = len(batches)
     correct = 0
     current = 0
     output_data = []
     pbar = tqdm(total=total)
-    model.to(torch.bfloat16)
+    model.to(load_dtype)
     model.eval()
     for idx, batch in enumerate(batches):
         current += len(batch)
@@ -229,6 +260,13 @@ def parse_args():
     parser.add_argument("--lora_r", type=int, required=True)
     parser.add_argument("--lora_alpha", type=int, required=True)
     parser.add_argument("--lora_dropout", type=float, default=0.05)
+    parser.add_argument(
+        "--dtype",
+        type=str,
+        default="auto",
+        choices=["auto", "bfloat16", "float32"],
+        help="Precision to load the model with (auto falls back to fp32 on Pascal GPUs)",
+    )
     # mlora
     parser.add_argument("--lambda_num", type=int)
     parser.add_argument("--num_B", type=int)
@@ -285,20 +323,21 @@ def load_model(args) -> tuple:
     tokenizer.padding_side = "left"
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
+    dtype = _get_preferred_dtype(args.dtype)
     if "llama" in base_model.lower() and args.adapter.lower() in [
         "mlora",
         "moelora",
     ]:
         model = LlamaForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
             trust_remote_code=True,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
             trust_remote_code=True,
         )  # fix zwq
