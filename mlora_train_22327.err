@@ -1,0 +1,13 @@
+/usr/bin/bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)
+/transformers/src/transformers/utils/hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/usr/local/bin/deepspeed", line 6, in <module>
+    main()
+  File "/usr/local/lib/python3.8/dist-packages/deepspeed/launcher/runner.py", line 479, in main
+    active_resources = parse_inclusion_exclusion(resource_pool, args.include, args.exclude)
+  File "/usr/local/lib/python3.8/dist-packages/deepspeed/launcher/runner.py", line 398, in parse_inclusion_exclusion
+    return parse_resource_filter(active_resources, include_str=inclusion, exclude_str=exclusion)
+  File "/usr/local/lib/python3.8/dist-packages/deepspeed/launcher/runner.py", line 363, in parse_resource_filter
+    raise ValueError(f"Hostname '{hostname}' not found in hostfile")
+ValueError: Hostname '0' not found in hostfile

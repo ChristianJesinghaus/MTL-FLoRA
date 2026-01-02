@@ -1,0 +1,72 @@
+This diff updates `mlora_evaluate.py` so that it can run on Pascal GPUs and use
+full precision by default.  It disables flash‑attention/SDPA kernels and
+removes hard‑coded bfloat16 casting.  The model is loaded in FP32 when the
+`USE_FP32` environment variable is set (default behaviour).
+
+    diff --git a/mlora_evaluate.py b/mlora_evaluate.py
+    --- a/mlora_evaluate.py
+    +++ b/mlora_evaluate.py
+    @@
+     import torch
+     from src.custom_model import LlamaForCausalLM
+    @@
+     sys.path.append(os.path.join(os.getcwd(), "~/MTL-LoRA"))
+
+    +# -------------------------------------------------------------------------
+    +# Runtime environment configuration for constrained clusters
+    +#
+    +# Disable flash‑attention and memory‑efficient SDPA kernels on Pascal GPUs
+    +# and set locale defaults.  Users can override these values in their
+    +# submission scripts.  See `mlora_finetune_patch.diff` for further details.
+    +os.environ.setdefault("PYTORCH_SDP_DISABLE_FLASH_ATTENTION", "1")
+    +os.environ.setdefault("PYTORCH_SDP_DISABLE_MEM_EFFICIENT", "1")
+    +os.environ.setdefault("LC_ALL", "C.UTF-8")
+    +os.environ.setdefault("LANG", "C.UTF-8")
+
+    @@ def load_model(args) -> tuple:
+     -    if "llama" in base_model.lower() and args.adapter.lower() in [
+     -        "mlora",
+     -        "moelora",
+     -    ]:
+     -        model = LlamaForCausalLM.from_pretrained(
+     -            base_model,
+     -            torch_dtype=torch.bfloat16,
+     -            device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
+     -            trust_remote_code=True,
+     -        )
+     -    else:
+     -        model = AutoModelForCausalLM.from_pretrained(
+     -            base_model,
+     -            torch_dtype=torch.bfloat16,
+     -            device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
+     -            trust_remote_code=True,
+     -        )  # fix zwq
+    +    # Determine the appropriate dtype based on GPU capabilities or the
+    +    # USE_FP32 environment variable.  When USE_FP32=1 (default), the
+    +    # model is loaded in full precision.  Users may override this
+    +    # behaviour by exporting USE_FP32=0 before calling the script.
+    +    use_fp32 = os.getenv("USE_FP32", "1") == "1"
+    +    dtype = torch.float32 if use_fp32 else torch.bfloat16
+    +
+    +    if "llama" in base_model.lower() and args.adapter.lower() in [
+    +        "mlora",
+    +        "moelora",
+    +    ]:
+    +        model = LlamaForCausalLM.from_pretrained(
+    +            base_model,
+    +            torch_dtype=dtype,
+    +            device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
+    +            trust_remote_code=True,
+    +        )
+    +    else:
+    +        model = AutoModelForCausalLM.from_pretrained(
+    +            base_model,
+    +            torch_dtype=dtype,
+    +            device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
+    +            trust_remote_code=True,
+    +        )  # fix zwq
+
+    @@ def main():
+     -    model.to(torch.bfloat16)
+     +    # Do not cast the model to bfloat16 on Pascal GPUs.  The model
+     +    # remains in the dtype determined at load time (float32 by default).

@@ -19,12 +19,24 @@ from transformers import (
 
 sys.path.append(os.path.join(os.getcwd(), "~/MTL-LoRA"))
 
+# -------------------------------------------------------------------------
+# Runtime environment configuration for constrained clusters
+#
+# Disable flash‑attention and memory‑efficient SDPA kernels on Pascal GPUs
+# and set locale defaults.  Users can override these values in their
+# submission scripts.
+os.environ.setdefault("PYTORCH_SDP_DISABLE_FLASH_ATTENTION", "1")
+os.environ.setdefault("PYTORCH_SDP_DISABLE_MEM_EFFICIENT", "1")
+os.environ.setdefault("LC_ALL", "C.UTF-8")
+os.environ.setdefault("LANG", "C.UTF-8")
+
 if torch.cuda.is_available():
     device = "cuda"
 else:
     device = "cpu"
 
 
+# Mapping from task names to IDs (used for mlora/moelora adapters)
 task_name_to_id = {
     "boolq": 0,
     "piqa": 1,
@@ -97,6 +109,7 @@ def main():
 
     dataset = load_data(args)
     batches = create_batch(dataset, args.batch_size)
+    global tokenizer, model
     tokenizer, model = load_model(args)
 
     total = len(batches)
@@ -104,7 +117,8 @@ def main():
     current = 0
     output_data = []
     pbar = tqdm(total=total)
-    model.to(torch.bfloat16)
+    # Do not cast the model to bfloat16 on Pascal GPUs.  The model
+    # remains in the dtype determined at load time (float32 by default).
     model.eval()
     for idx, batch in enumerate(batches):
         current += len(batch)
@@ -285,20 +299,27 @@ def load_model(args) -> tuple:
     tokenizer.padding_side = "left"
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
+    # Determine the appropriate dtype based on GPU capabilities or the
+    # USE_FP32 environment variable.  When USE_FP32=1 (default), the
+    # model is loaded in full precision.  Users may override this
+    # behaviour by exporting USE_FP32=0 before calling the script.
+    use_fp32 = os.getenv("USE_FP32", "1") == "1"
+    dtype = torch.float32 if use_fp32 else torch.bfloat16
+
     if "llama" in base_model.lower() and args.adapter.lower() in [
         "mlora",
         "moelora",
     ]:
         model = LlamaForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
             trust_remote_code=True,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             device_map={"": int(os.environ.get("LOCAL_RANK") or 0)},
             trust_remote_code=True,
         )  # fix zwq

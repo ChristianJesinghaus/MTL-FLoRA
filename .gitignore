@@ -172,3 +172,69 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+
+############################################
+# Apptainer / Singularity (Images & Artifacts)
+############################################
+
+# Apptainer/Singularity Image-Dateien
+*.sif
+*.simg
+*.img
+*.squashfs
+*.sqsh
+*.ext3
+*.sandbox  # falls jemand sandbox als Datei benennt (selten)
+
+# Häufige lokale Build-Ausgaben / Sandbox-Verzeichnisse
+*.sandbox/
+*-sandbox/
+sandbox/
+apptainer-sandbox/
+singularity-sandbox/
+
+# Lokale Projekt-Caches (falls im Repo-Ordner genutzt)
+.apptainer/
+.singularity/
+apptainer_cache/
+singularity_cache/
+apptainer-cache/
+singularity-cache/
+
+# Temporäre Build-Artefakte
+*.def~
+
+
+############################################
+# Docker (Image Exports / OCI Archives & Caches)
+############################################
+
+# Docker image exports (z.B. `docker save -o image.tar ...`)
+*.tar
+*.tar.gz
+*.tgz
+*.tar.zst
+image.tar
+docker-image.tar
+docker-image*.tar
+
+# OCI Image Layout / Archives (z.B. `skopeo copy ... oci:`)
+*.oci
+oci-layout
+blobs/
+index.json
+
+# Lokale Docker/BuildKit/Buildx Cache-Ordner (falls im Projekt abgelegt)
+.docker/
+docker-cache/
+buildkit-cache/
+buildx-cache/
+.bake/
+
+
+############################################
+# Optional: Logs & temporäres Zeug (falls hilfreich)
+############################################
+*.log
+*.tmp

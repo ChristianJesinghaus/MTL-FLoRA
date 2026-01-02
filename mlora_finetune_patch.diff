@@ -1,0 +1,67 @@
+diff --git a/mlora_finetune.py b/mlora_finetune.py
+--- a/mlora_finetune.py
++++ b/mlora_finetune.py
+@@ -307,15 +307,24 @@
+ ):
+     use_wandb = wandb_project is not None
+     add_filehandler(logger, os.path.join(output_dir, "logging"))
++    # Determine the appropriate dtype based on GPU capabilities or the
++    # USE_FP32 environment variable.  When USE_FP32=1 (default), the
++    # model is loaded in full precision (FP32).  This is critical for
++    # Pascal GPUs, which cannot accelerate bfloat16 and often produce
++    # numerical instabilities with half precision.  Users may override
++    # this behaviour by setting USE_FP32=0.
++    use_fp32 = os.getenv("USE_FP32", "1") == "1"
++    dtype = torch.float32 if use_fp32 else torch.bfloat16
++
+     if "llama" in base_model and adapter_name.lower() in ["mlora", "moelora"]:
+         model = LlamaForCausalLM.from_pretrained(
+             base_model,
+-            torch_dtype=torch.bfloat16,
++            torch_dtype=dtype,
+         )
+     else:
+         model = AutoModelForCausalLM.from_pretrained(
+             base_model,
+-            torch_dtype=torch.bfloat16,
++            torch_dtype=dtype,
+             trust_remote_code=True,
+         )
+@@ -445,6 +454,10 @@
+         if cache_dir is not None:
+             train_data.save_to_disk(os.path.join(cache_dir, "train"))
+ 
++    # Configure the Trainer.  We explicitly disable bfloat16 by not
++    # setting `bf16=True` when training on Pascal GPUs.  If USE_FP32=0
++    # the user can still enable mixed precision via the Deepspeed config.
+     trainer = transformers.Trainer(
+         model=model,
+         train_dataset=train_data,
+@@ -455,7 +468,7 @@
+             num_train_epochs=num_epochs,
+             learning_rate=learning_rate,
+             weight_decay=weight_decay,
+-            bf16=True,
++            # removed bf16=True to avoid implicit half precision on unsupported GPUs
+             deepspeed=deepspeed,
+             logging_steps=10,
+             optim="adamw_torch",
+@@ -467,11 +480,16 @@
+             output_dir=output_dir,
+             save_total_limit=3,
+             load_best_model_at_end=False,
+-            report_to=(["wandb", "tensorboard"] if use_wandb else ["tensorboard"]),
++            report_to=(
++                ["wandb", "tensorboard"] if use_wandb else ["tensorboard"]
++            ),
+             run_name=wandb_run_name if use_wandb else None,
+         ),
+         data_collator=transformers.DataCollatorForSeq2Seq(
+-            tokenizer, return_tensors="pt", padding=True, max_length=cutoff_len
++            tokenizer,
++            return_tensors="pt",
++            padding=True,
++            max_length=cutoff_len,
+         ),
+     )
+     trainer.train(resume_from_checkpoint=resume_from_checkpoint)

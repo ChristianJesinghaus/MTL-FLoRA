@@ -1,0 +1,1 @@
+FATAL:   While checking container encryption: could not open image /docker_1.sif: failed to retrieve path for /docker_1.sif: lstat /docker_1.sif: no such file or directory

@@ -1,0 +1,2 @@
+/usr/bin/bash: warning: setlocale: LC_ALL: cannot change locale (en_US.UTF-8)
+tinyllama_mlora_train.sh: line 69: python: command not found

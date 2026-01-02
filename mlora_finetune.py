@@ -12,9 +12,69 @@ from src.custom_model import LlamaForCausalLM
 from src.utils import add_filehandler, save_pretrain, set_no_grad, wrap_model
 from transformers import AutoModelForCausalLM, AutoTokenizer, LlamaTokenizer
 
+# -----------------------------------------------------------------------------
+# Custom Trainer for MTL‑LoRA
+#
+# The default Hugging Face Trainer does not forward the `lambda_index` field
+# contained in each batch to the model.  For MTL‑LoRA training, the model
+# requires this extra argument to select the appropriate low‑rank adapters for
+# each task.  We override `compute_loss` so that the `lambda_index` tensor is
+# extracted from the batch, moved to the correct device and passed into the
+# model's forward method.
+class MLoRATrainer(transformers.Trainer):
+    """Trainer subclass that forwards the `lambda_index` field to the model."""
+
+    def compute_loss(self, model, inputs, return_outputs=False):
+        # Pop the lambda_index field from the inputs if present.  We must pop
+        # rather than read because the base implementation will complain about
+        # unexpected keyword arguments.
+        # Extract the lambda_index tensor from inputs if present.  We pop it so
+        # that the base model does not receive unknown keyword arguments.  If
+        # missing, we construct a default tensor of zeros matching the batch
+        # size.  This ensures that the model's forward signature is always
+        # satisfied and avoids ``TypeError: missing required positional
+        # argument 'lambda_index'``.
+        batch_size = None
+        lambda_index = None
+        if "input_ids" in inputs:
+            # input_ids is always present in language model training
+            if isinstance(inputs["input_ids"], torch.Tensor):
+                batch_size = inputs["input_ids"].shape[0]
+            else:
+                # handle list of lists
+                batch_size = len(inputs["input_ids"])
+        if "lambda_index" in inputs:
+            lambda_index = inputs.pop("lambda_index")
+            if isinstance(lambda_index, torch.Tensor):
+                lambda_index = lambda_index.to(model.device)
+        else:
+            # If lambda_index is missing, default to zeros
+            if batch_size is None:
+                raise ValueError("Cannot infer batch size to create default lambda_index")
+            lambda_index = torch.zeros(batch_size, dtype=torch.long, device=model.device)
+        # Forward pass with lambda_index
+        outputs = model(**inputs, lambda_index=lambda_index)
+        # Standard behaviour: the model is expected to return a loss when labels
+        # are provided.  If return_outputs is True, also return the outputs.
+        loss = outputs[0] if isinstance(outputs, tuple) else outputs.loss
+        return (loss, outputs) if return_outputs else loss
+
 logger = LoggerFactory.create_logger(__name__)
 sys.path.append(os.path.join(os.getcwd(), "~/MTL-LoRA"))
 
+# -------------------------------------------------------------------------
+# Runtime environment configuration for constrained clusters
+#
+# Pascal GPUs (compute capability 6.x) do not support bfloat16 and achieve
+# better stability using full precision. We disable flash‑attention and
+# memory‑efficient SDPA kernels and set locale defaults. Users can override
+# these values in their submission scripts.
+os.environ.setdefault("PYTORCH_SDP_DISABLE_FLASH_ATTENTION", "1")
+os.environ.setdefault("PYTORCH_SDP_DISABLE_MEM_EFFICIENT", "1")
+os.environ.setdefault("LC_ALL", "C.UTF-8")
+os.environ.setdefault("LANG", "C.UTF-8")
+
+# task_name_to_id mapping is unused but kept for reference
 # task_name_to_id = {
 #     "boolq": 0,
 #     "piqa": 1,
@@ -25,7 +85,6 @@ sys.path.append(os.path.join(os.getcwd(), "~/MTL-LoRA"))
 #     "ARC-Easy": 6,
 #     "openbookqa": 7,
 # }
-
 
 def generate_prompt(data_point):
     if data_point["input"]:
@@ -48,9 +107,7 @@ def generate_prompt(data_point):
                 ### Response:
                 {data_point["output"]}"""
 
-
 import argparse
-
 
 def arg_parser():
     parser = argparse.ArgumentParser()
@@ -263,7 +320,6 @@ def arg_parser():
 
     return parser.parse_args()
 
-
 def train(
     base_model: str = "",
     cache_dir: str = None,  # cache tokenized data
@@ -307,15 +363,30 @@ def train(
 ):
     use_wandb = wandb_project is not None
     add_filehandler(logger, os.path.join(output_dir, "logging"))
-    if "llama" in base_model and adapter_name.lower() in ["mlora", "moelora"]:
+
+    # Determine the appropriate dtype based on GPU capabilities or the
+    # USE_FP32 environment variable.  When USE_FP32=1 (default), the
+    # model is loaded in full precision (FP32).  This is critical for
+    # Pascal GPUs, which cannot accelerate bfloat16 and often produce
+    # numerical instabilities with half precision.  Users may override
+    # this behaviour by setting USE_FP32=0.
+    use_fp32 = os.getenv("USE_FP32", "1") == "1"
+    dtype = torch.float32 if use_fp32 else torch.bfloat16
+
+    # Use the custom LlamaForCausalLM for any base model containing "llama" (case‑insensitive).
+    # The original check was case‑sensitive and failed for TinyLlama, causing the
+    # standard AutoModelForCausalLM to be loaded.  That model does not support
+    # the `lambda_index` argument and leads to errors.  We therefore lower‑case
+    # the base_model string before checking.
+    if "llama" in base_model.lower() and adapter_name.lower() in ["mlora", "moelora"]:
         model = LlamaForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
         )
     else:
         model = AutoModelForCausalLM.from_pretrained(
             base_model,
-            torch_dtype=torch.bfloat16,
+            torch_dtype=dtype,
             trust_remote_code=True,
         )
 
@@ -417,7 +488,7 @@ def train(
                 -100
             ] * user_prompt_len + tokenized_full_prompt["labels"][
                 user_prompt_len:
-            ]  # could be sped up, probably
+            ]
 
         if adapter_name.lower() in ["mlora", "moelora"]:
             tokenized_full_prompt["lambda_index"] = data_point["task_id"]
@@ -426,7 +497,7 @@ def train(
     if cache_dir is not None and os.path.exists(os.path.join(cache_dir, "train")):
         train_data = load_from_disk(os.path.join(cache_dir, "train"))
     else:
-        if data_path.endswith(".json"):  # todo: support jsonl
+        if data_path.endswith(".json"):
             data = load_dataset("json", data_files=data_path)
         else:
             data = load_dataset(data_path)
@@ -445,7 +516,10 @@ def train(
         if cache_dir is not None:
             train_data.save_to_disk(os.path.join(cache_dir, "train"))
 
-    trainer = transformers.Trainer(
+    # Use the custom MLoRATrainer so that the `lambda_index` field is passed
+    # correctly to the model during training.  See the `MLoRATrainer` class
+    # definition above for details.
+    trainer = MLoRATrainer(
         model=model,
         train_dataset=train_data,
         args=transformers.TrainingArguments(
@@ -455,7 +529,7 @@ def train(
             num_train_epochs=num_epochs,
             learning_rate=learning_rate,
             weight_decay=weight_decay,
-            bf16=True,
+            # removed bf16=True to avoid implicit half precision on unsupported GPUs
             deepspeed=deepspeed,
             logging_steps=10,
             optim="adamw_torch",
@@ -467,11 +541,16 @@ def train(
             output_dir=output_dir,
             save_total_limit=3,
             load_best_model_at_end=False,
-            report_to=(["wandb", "tensorboard"] if use_wandb else ["tensorboard"]),
+            report_to=(
+                ["wandb", "tensorboard"] if use_wandb else ["tensorboard"]
+            ),
             run_name=wandb_run_name if use_wandb else None,
         ),
         data_collator=transformers.DataCollatorForSeq2Seq(
-            tokenizer, return_tensors="pt", padding=True, max_length=cutoff_len
+            tokenizer,
+            return_tensors="pt",
+            padding=True,
+            max_length=cutoff_len,
         ),
     )
     trainer.train(resume_from_checkpoint=resume_from_checkpoint)

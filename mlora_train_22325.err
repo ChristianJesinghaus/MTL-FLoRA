@@ -1,0 +1,8 @@
+WARNING: skipping mount of /tmp/christian.jesinghaus/22325: stat /tmp/christian.jesinghaus/22325: no such file or directory
+INFO:    Terminating squashfuse_ll after timeout
+INFO:    Timeouts can be caused by a running background process
+INFO:    A fusermount error may indicate that the kernel is too old
+INFO:    The --unsquash option may work around it
+INFO:    Cleanup error: while stopping driver for /var/lib/apptainer/mnt/session/rootfs: squashfuse_ll exited: On calling fusermount posix_spawn failed: No such file or directory
+Spawning fusermount3 to unmount failed: No such file or directory
+FATAL:   container creation failed: mount hook function failure: mount /tmp/christian.jesinghaus/22325->/tmp/christian.jesinghaus/22325 error: while mounting /tmp/christian.jesinghaus/22325: mount source /tmp/christian.jesinghaus/22325 doesn't exist
