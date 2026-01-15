@@ -1,0 +1,8 @@
+/transformers/src/transformers/utils/hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/transformers/src/transformers/utils/hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+[W CUDAAllocatorConfig.h:28] Warning: expandable_segments not supported on this platform (function operator())
+[W CUDAAllocatorConfig.h:28] Warning: expandable_segments not supported on this platform (function operator())
+slurmstepd-pascal-node05.l3s.intra: error: slurm_get_node_energy: Socket timed out on send/recv operation
+slurmstepd-pascal-node05.l3s.intra: error: _get_joules_task: can't get info from slurmd

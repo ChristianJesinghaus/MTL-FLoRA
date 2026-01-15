@@ -1,0 +1,52 @@
+/transformers/src/transformers/utils/hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+/usr/local/lib/python3.8/dist-packages/huggingface_hub/file_download.py:1132: FutureWarning: `resume_download` is deprecated and will be removed in version 1.0.0. Downloads always resume when possible. If you want to force a new download, use `force_download=True`.
+  warnings.warn(
+Some weights of RobertaModel were not initialized from the model checkpoint at roberta-base and are newly initialized: ['roberta.pooler.dense.bias', 'roberta.pooler.dense.weight']
+You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference.
+Map:   0%|          | 0/8551 [00:00<?, ? examples/s]Map:  12%|█▏        | 1000/8551 [00:00<00:00, 9021.02 examples/s]Map:  23%|██▎       | 2000/8551 [00:00<00:00, 9411.25 examples/s]Map:  47%|████▋     | 4000/8551 [00:00<00:00, 10603.90 examples/s]Map:  70%|███████   | 6000/8551 [00:00<00:00, 12189.32 examples/s]Map:  94%|█████████▎| 8000/8551 [00:00<00:00, 13186.72 examples/s]Map: 100%|██████████| 8551/8551 [00:00<00:00, 12190.80 examples/s]
+Map:   0%|          | 0/1043 [00:00<?, ? examples/s]Map:  96%|█████████▌| 1000/1043 [00:00<00:00, 3862.12 examples/s]Map: 100%|██████████| 1043/1043 [00:00<00:00, 3920.43 examples/s]
+Traceback (most recent call last):
+  File "run_glue_roberta_mtl_lora.py", line 604, in <module>
+    main()
+  File "run_glue_roberta_mtl_lora.py", line 479, in main
+    task_data = build_dataloaders(
+  File "run_glue_roberta_mtl_lora.py", line 238, in build_dataloaders
+    dataset = load_dataset("glue", task)
+  File "/usr/local/lib/python3.8/dist-packages/datasets/load.py", line 2128, in load_dataset
+    builder_instance = load_dataset_builder(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/load.py", line 1814, in load_dataset_builder
+    dataset_module = dataset_module_factory(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/load.py", line 1511, in dataset_module_factory
+    raise e1 from None
+  File "/usr/local/lib/python3.8/dist-packages/datasets/load.py", line 1488, in dataset_module_factory
+    return HubDatasetModuleFactoryWithoutScript(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/load.py", line 1080, in get_module
+    builder_configs, default_config_name = create_builder_configs_from_metadata_configs(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/load.py", line 558, in create_builder_configs_from_metadata_configs
+    config_data_files_dict = DataFilesDict.from_patterns(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/data_files.py", line 686, in from_patterns
+    DataFilesList.from_patterns(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/data_files.py", line 591, in from_patterns
+    resolve_pattern(
+  File "/usr/local/lib/python3.8/dist-packages/datasets/data_files.py", line 353, in resolve_pattern
+    for filepath, info in fs.glob(pattern, detail=True).items()
+  File "/usr/local/lib/python3.8/dist-packages/huggingface_hub/hf_file_system.py", line 407, in glob
+    return super().glob(path, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/fsspec/spec.py", line 602, in glob
+    allpaths = self.find(root, maxdepth=depth, withdirs=True, detail=True, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/huggingface_hub/hf_file_system.py", line 420, in find
+    return super().find(
+  File "/usr/local/lib/python3.8/dist-packages/fsspec/spec.py", line 493, in find
+    out[path] = self.info(path)
+  File "/usr/local/lib/python3.8/dist-packages/huggingface_hub/hf_file_system.py", line 527, in info
+    paths_info = self._api.get_paths_info(
+  File "/usr/local/lib/python3.8/dist-packages/huggingface_hub/utils/_validators.py", line 114, in _inner_fn
+    return fn(*args, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/huggingface_hub/hf_api.py", line 3045, in get_paths_info
+    hf_raise_for_status(response)
+  File "/usr/local/lib/python3.8/dist-packages/huggingface_hub/utils/_errors.py", line 371, in hf_raise_for_status
+    raise HfHubHTTPError(str(e), response=response) from e
+huggingface_hub.utils._errors.HfHubHTTPError: 429 Client Error: Too Many Requests for url: https://huggingface.co/api/datasets/glue/paths-info/bcdcba79d07bc864c1c254ccfcedcce55bcc9a8c (Request ID: Root=1-69669c6b-542a41e3355b18021332909b;aed35d56-39b6-4346-8fa3-102a651c3c64)
+
+We had to rate limit your IP (130.75.87.254). To continue using our service, create a HF account or login to your existing account, and make sure you pass a HF_TOKEN if you're using the API.

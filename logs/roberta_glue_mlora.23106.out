@@ -1,0 +1,17 @@
+==========================================
+SLURM_JOB_ID = 23106
+SLURM_NODELIST = pascal-node02.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID = 23106
+SLURM_NODELIST = pascal-node02.l3s.intra
+==========================================
+[INFO] Job started on pascal-node02 at Tue Jan 13 09:49:49 PM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[INFO] CONTAINER=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
+[INFO] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23106
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[INFO] HF token present? yes
+[INFO] Using Python inside container: python3
+Python 3.8.10

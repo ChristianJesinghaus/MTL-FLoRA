@@ -1,0 +1,17 @@
+==========================================
+SLURM_JOB_ID = 23097
+SLURM_NODELIST = pascal-node02.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID = 23097
+SLURM_NODELIST = pascal-node02.l3s.intra
+==========================================
+[INFO] Job started on pascal-node02 at Tue Jan 13 07:20:27 PM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[INFO] CACHE_BASE=/home/christian.jesinghaus
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[INFO] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23097
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[INFO] CONTAINER=/home/christian.jesinghaus/FL/130126/MTL-LoRA/my-fluffy-cow.sif
+[INFO] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23097
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface

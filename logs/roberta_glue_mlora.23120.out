@@ -1,0 +1,42 @@
+==========================================
+SLURM_JOB_ID = 23120
+SLURM_NODELIST = pascal-node02.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID = 23120
+SLURM_NODELIST = pascal-node02.l3s.intra
+==========================================
+[INFO] Job started on pascal-node02 at Tue Jan 13 10:51:24 PM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[INFO] CONTAINER=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
+[INFO] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23120
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[INFO] HF token present? yes
+[INFO] Using Python inside container: python3
+Python 3.8.10
+[INFO] offline=False
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[INFO] glue_disk_cache_dir=/home/christian.jesinghaus/.cache/huggingface/glue_disk_cache
+[INFO] hf_datasets_cache_dir=/home/christian.jesinghaus/.cache/huggingface/datasets
+[INFO] hf_token_present=yes
+[INFO] Replaced 48 Linear layers with mLoRALinear
+[INFO] Trainable params: 1,217,680 / 125,272,720 (0.9720%)
+[INFO] GLUE/cola: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_cola
+[INFO] GLUE/sst2: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_sst2
+[INFO] GLUE/mrpc: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_mrpc
+[WARN] HF 429 for GLUE/qqp. Token present. Retry 1/8 in 30s...
+[INFO] GLUE/qqp: saving to disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_qqp
+[INFO] GLUE/mnli: saving to disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_mnli
+[WARN] HF 429 for GLUE/qnli. Token present. Retry 1/8 in 30s...
+[WARN] HF 429 for GLUE/qnli. Token present. Retry 2/8 in 60s...
+[WARN] HF 429 for GLUE/qnli. Token present. Retry 3/8 in 120s...
+[INFO] GLUE/qnli: saving to disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_qnli
+[WARN] HF 429 for GLUE/rte. Token present. Retry 1/8 in 30s...
+[WARN] HF 429 for GLUE/rte. Token present. Retry 2/8 in 60s...
+[INFO] GLUE/rte: saving to disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_rte
+[WARN] HF 429 for GLUE/stsb. Token present. Retry 1/8 in 30s...
+[WARN] HF 429 for GLUE/stsb. Token present. Retry 2/8 in 60s...
+[WARN] HF 429 for GLUE/stsb. Token present. Retry 3/8 in 120s...
+[WARN] HF 429 for GLUE/stsb. Token present. Retry 4/8 in 240s...
+[INFO] GLUE/stsb: saving to disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_stsb

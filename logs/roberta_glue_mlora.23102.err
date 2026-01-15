@@ -1,0 +1,6 @@
+/transformers/src/transformers/utils/hub.py:124: FutureWarning: Using `TRANSFORMERS_CACHE` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.
+  warnings.warn(
+Traceback (most recent call last):
+  File "glue_roberta/run_glue_roberta_mtl_lora.py", line 38, in <module>
+    from adapter.mlora import mLoRALinear, mlora_set_lambda_index
+ModuleNotFoundError: No module named 'adapter'

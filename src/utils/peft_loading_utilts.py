@@ -1,6 +1,6 @@
 import os
 from functools import partial
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Optional
 
 import torch
 import torch.nn as nn
@@ -25,21 +25,36 @@ ADAPTER_MAPPING = {
 }
 
 
-def maybe_zero_3(param, ignore_status=False, name=None):
-    from deepspeed import zero
-    from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus
+def maybe_zero_3(param, ignore_status: bool = False, name: Optional[str] = None):
+    """Detach a parameter safely.
 
-    if hasattr(param, "ds_id"):
-        if param.ds_status == ZeroParamStatus.NOT_AVAILABLE:
+    In the original repo this gathered ZeRO-3 partitioned params via DeepSpeed.
+    For single-GPU runs without DeepSpeed, we fall back to a simple detach/clone.
+
+    Returns a CPU tensor clone.
+    """
+    if param is None:
+        return None
+
+    # DeepSpeed is optional
+    try:
+        from deepspeed import zero  # type: ignore
+        from deepspeed.runtime.zero.partition_parameters import ZeroParamStatus  # type: ignore
+
+        _ds_ok = True
+    except Exception:
+        _ds_ok = False
+
+    if _ds_ok and hasattr(param, "ds_id"):
+        if getattr(param, "ds_status", None) == ZeroParamStatus.NOT_AVAILABLE:
             if not ignore_status:
                 print(
-                    f"{name}: param.ds_status != ZeroParamStatus.NOT_AVAILABLE: {param.ds_status}"
+                    f"{name}: param.ds_status != ZeroParamStatus.NOT_AVAILABLE: {getattr(param, 'ds_status', None)}"
                 )
-        with zero.GatheredParameters([param]):
-            param = param.data.detach().cpu().clone()
-    else:
-        param = param.detach().cpu().clone()
-    return param
+        with zero.GatheredParameters([param]):  # type: ignore
+            return param.data.detach().cpu().clone()
+
+    return param.detach().cpu().clone()
 
 
 def get_lora_param_maybe_zero_3(named_params, valid_keys: List[str] = ["lora"]):
@@ -126,6 +141,7 @@ def wrap_model(
             adapter_module = adapter_impl(
                 in_features=target.in_features,
                 out_features=target.out_features,
+                bias=(target.bias is not None),
             )
             adapter_module.to(device=model.device, dtype=model.dtype)
             adapter_module.load_state_dict(target.state_dict(), strict=False)
