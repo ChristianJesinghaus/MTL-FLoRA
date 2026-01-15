@@ -1,0 +1,15 @@
+==========================================
+SLURM_JOB_ID = 24151
+SLURM_NODELIST = pascal-node01.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID   = 24151
+SLURM_NODELIST = pascal-node01.l3s.intra
+CUDA_VISIBLE_DEVICES = 0,1
+==========================================
+[INFO] Job started on pascal-node01 at Thu Jan 15 06:49:27 PM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA/script
+[RUN] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_24151
+[RUN] NPROC=2
+[RUN] CONTAINER_IMAGE=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
+[RUN] CMD=torchrun --standalone --nproc_per_node=2 python3 -u run_glue_roberta_mtl_lora.py --output_dir /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_24151 --epochs 2 --train_batch_size 8 --eval_batch_size 32 --grad_accum_steps 2 --learning_rate 2e-4 --warmup_ratio 0.06 --max_length 256 --lora_r 8 --lora_alpha 16 --lora_dropout 0.05 --num_B 3 --temperature 0.1 --fp16 --save_pre_eval_ckpt --save_eval_details --eval_details_max_examples 200 

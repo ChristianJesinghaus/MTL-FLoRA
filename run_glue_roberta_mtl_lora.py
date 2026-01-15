@@ -1053,7 +1053,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--num_workers", type=int, default=2)
 
     # Mixed precision
-    p.add_argument("--fp16", action="store_true", help="Enable FP16 autocast (recommended on 1080 Ti).")
+    p.add_argument("--fp32", action="store_true", help="Enable FP32 autocast (recommended on 1080 Ti).")
 
     # LoRA / mLoRA hyperparams
     p.add_argument("--lora_r", type=int, default=8)
@@ -1133,7 +1133,7 @@ def main() -> None:
     set_seed(args.seed + rank)
 
     device = torch.device("cuda", local_rank) if torch.cuda.is_available() else torch.device("cpu")
-    use_amp = bool(args.fp16 and device.type == "cuda")
+    use_amp = bool(args.fp32 and device.type == "cuda")
 
     # HF config
     hf_token = _get_hf_token(args.hf_token)
@@ -1246,10 +1246,10 @@ def main() -> None:
     )
 
     # GradScaler enabled only if AMP and trainable params are not fp16
-    trainable_has_fp16 = any((p_.requires_grad and p_.dtype == torch.float16) for p_ in model.parameters())
-    use_scaler = bool(use_amp and (not trainable_has_fp16))
+    trainable_has_fp32 = any((p_.requires_grad and p_.dtype == torch.float16) for p_ in model.parameters())
+    use_scaler = bool(use_amp and (not trainable_has_fp32))
     if is_main_process() and use_amp and not use_scaler:
-        print("[WARN] AMP requested but trainable params are fp16 -> disabling GradScaler to avoid crash.")
+        print("[WARN] AMP requested but trainable params are fp32 -> disabling GradScaler to avoid crash.")
     scaler = torch.cuda.amp.GradScaler(enabled=use_scaler) if device.type == "cuda" else None
 
     # Resume / load for eval

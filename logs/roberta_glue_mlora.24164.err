@@ -1,0 +1,100 @@
+[rank0]:[E ProcessGroupNCCL.cpp:563] [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1, OpType=ALLREDUCE, NumelIn=1, NumelOut=1, Timeout(ms)=600000) ran for 600016 milliseconds before timing out.
+[rank1]:[E ProcessGroupNCCL.cpp:563] [Rank 1] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1, OpType=ALLREDUCE, NumelIn=1, NumelOut=1, Timeout(ms)=600000) ran for 600022 milliseconds before timing out.
+[rank0]:[E ProcessGroupNCCL.cpp:1537] [PG 0 Rank 0] Timeout at NCCL work: 1, last enqueued NCCL work: 1, last completed NCCL work: 0.
+[rank0]:[E ProcessGroupNCCL.cpp:577] [Rank 0] Some NCCL operations have failed or timed out. Due to the asynchronous nature of CUDA kernels, subsequent GPU operations might run on corrupted/incomplete data.
+[rank0]:[E ProcessGroupNCCL.cpp:583] [Rank 0] To avoid data inconsistency, we are taking the entire process down.
+[rank0]:[E ProcessGroupNCCL.cpp:1414] [PG 0 Rank 0] Process group watchdog thread terminated with exception: [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1, OpType=ALLREDUCE, NumelIn=1, NumelOut=1, Timeout(ms)=600000) ran for 600016 milliseconds before timing out.
+Exception raised from checkTimeout at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:565 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x57 (0x7fad7efa6897 in /usr/local/lib/python3.8/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x1d2 (0x7fad802811b2 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x1a0 (0x7fad80285fd0 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x10c (0x7fad8028731c in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xd6df4 (0x7fadcbd2adf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #5: <unknown function> + 0x8609 (0x7fadcccc2609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #6: clone + 0x43 (0x7fadccdfc133 in /lib/x86_64-linux-gnu/libc.so.6)
+
+terminate called after throwing an instance of 'c10::DistBackendError'
+  what():  [PG 0 Rank 0] Process group watchdog thread terminated with exception: [Rank 0] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1, OpType=ALLREDUCE, NumelIn=1, NumelOut=1, Timeout(ms)=600000) ran for 600016 milliseconds before timing out.
+Exception raised from checkTimeout at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:565 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x57 (0x7fad7efa6897 in /usr/local/lib/python3.8/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x1d2 (0x7fad802811b2 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x1a0 (0x7fad80285fd0 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x10c (0x7fad8028731c in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xd6df4 (0x7fadcbd2adf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #5: <unknown function> + 0x8609 (0x7fadcccc2609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #6: clone + 0x43 (0x7fadccdfc133 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Exception raised from ncclCommWatchdog at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:1418 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x57 (0x7fad7efa6897 in /usr/local/lib/python3.8/dist-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0xe32e33 (0x7fad7ff09e33 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: <unknown function> + 0xd6df4 (0x7fadcbd2adf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #3: <unknown function> + 0x8609 (0x7fadcccc2609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #4: clone + 0x43 (0x7fadccdfc133 in /lib/x86_64-linux-gnu/libc.so.6)
+
+[rank1]:[E ProcessGroupNCCL.cpp:1537] [PG 0 Rank 1] Timeout at NCCL work: 1, last enqueued NCCL work: 1, last completed NCCL work: 0.
+[rank1]:[E ProcessGroupNCCL.cpp:577] [Rank 1] Some NCCL operations have failed or timed out. Due to the asynchronous nature of CUDA kernels, subsequent GPU operations might run on corrupted/incomplete data.
+[rank1]:[E ProcessGroupNCCL.cpp:583] [Rank 1] To avoid data inconsistency, we are taking the entire process down.
+[rank1]:[E ProcessGroupNCCL.cpp:1414] [PG 0 Rank 1] Process group watchdog thread terminated with exception: [Rank 1] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1, OpType=ALLREDUCE, NumelIn=1, NumelOut=1, Timeout(ms)=600000) ran for 600022 milliseconds before timing out.
+Exception raised from checkTimeout at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:565 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x57 (0x7ff3a6b38897 in /usr/local/lib/python3.8/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x1d2 (0x7ff3a7e131b2 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x1a0 (0x7ff3a7e17fd0 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x10c (0x7ff3a7e1931c in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xd6df4 (0x7ff3f38bcdf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #5: <unknown function> + 0x8609 (0x7ff3f4854609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #6: clone + 0x43 (0x7ff3f498e133 in /lib/x86_64-linux-gnu/libc.so.6)
+
+terminate called after throwing an instance of 'c10::DistBackendError'
+  what():  [PG 0 Rank 1] Process group watchdog thread terminated with exception: [Rank 1] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1, OpType=ALLREDUCE, NumelIn=1, NumelOut=1, Timeout(ms)=600000) ran for 600022 milliseconds before timing out.
+Exception raised from checkTimeout at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:565 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x57 (0x7ff3a6b38897 in /usr/local/lib/python3.8/dist-packages/torch/lib/libc10.so)
+frame #1: c10d::ProcessGroupNCCL::WorkNCCL::checkTimeout(std::optional<std::chrono::duration<long, std::ratio<1l, 1000l> > >) + 0x1d2 (0x7ff3a7e131b2 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: c10d::ProcessGroupNCCL::watchdogHandler() + 0x1a0 (0x7ff3a7e17fd0 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #3: c10d::ProcessGroupNCCL::ncclCommWatchdog() + 0x10c (0x7ff3a7e1931c in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #4: <unknown function> + 0xd6df4 (0x7ff3f38bcdf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #5: <unknown function> + 0x8609 (0x7ff3f4854609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #6: clone + 0x43 (0x7ff3f498e133 in /lib/x86_64-linux-gnu/libc.so.6)
+
+Exception raised from ncclCommWatchdog at ../torch/csrc/distributed/c10d/ProcessGroupNCCL.cpp:1418 (most recent call first):
+frame #0: c10::Error::Error(c10::SourceLocation, std::string) + 0x57 (0x7ff3a6b38897 in /usr/local/lib/python3.8/dist-packages/torch/lib/libc10.so)
+frame #1: <unknown function> + 0xe32e33 (0x7ff3a7a9be33 in /usr/local/lib/python3.8/dist-packages/torch/lib/libtorch_cuda.so)
+frame #2: <unknown function> + 0xd6df4 (0x7ff3f38bcdf4 in /lib/x86_64-linux-gnu/libstdc++.so.6)
+frame #3: <unknown function> + 0x8609 (0x7ff3f4854609 in /lib/x86_64-linux-gnu/libpthread.so.0)
+frame #4: clone + 0x43 (0x7ff3f498e133 in /lib/x86_64-linux-gnu/libc.so.6)
+
+E0115 19:45:15.864166 139730083567424 torch/distributed/elastic/multiprocessing/api.py:826] failed (exitcode: -6) local_rank: 0 (pid: 3723939) of binary: /usr/bin/python3
+Traceback (most recent call last):
+  File "/usr/local/bin/torchrun", line 8, in <module>
+    sys.exit(main())
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 347, in wrapper
+    return f(*args, **kwargs)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/run.py", line 879, in main
+    run(args)
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/run.py", line 870, in run
+    elastic_launch(
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/launcher/api.py", line 132, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/usr/local/lib/python3.8/dist-packages/torch/distributed/launcher/api.py", line 263, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+========================================================
+run_glue_roberta_mtl_lora.py FAILED
+--------------------------------------------------------
+Failures:
+[1]:
+  time      : 2026-01-15_19:45:15
+  host      : pascal-node01.l3s.intra
+  rank      : 1 (local_rank: 1)
+  exitcode  : -6 (pid: 3723940)
+  error_file: <N/A>
+  traceback : Signal 6 (SIGABRT) received by PID 3723940
+--------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-01-15_19:45:15
+  host      : pascal-node01.l3s.intra
+  rank      : 0 (local_rank: 0)
+  exitcode  : -6 (pid: 3723939)
+  error_file: <N/A>
+  traceback : Signal 6 (SIGABRT) received by PID 3723939
+========================================================

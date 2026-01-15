@@ -1,0 +1,25 @@
+==========================================
+SLURM_JOB_ID = 24164
+SLURM_NODELIST = pascal-node01.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID   = 24164
+SLURM_NODELIST = pascal-node01.l3s.intra
+CUDA_VISIBLE_DEVICES = 0,1
+==========================================
+[INFO] Job started on pascal-node01 at Thu Jan 15 07:34:55 PM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[RUN] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_24164
+[RUN] NPROC=2
+[RUN] OMP_NUM_THREADS=8
+[RUN] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[RUN] CONTAINER_IMAGE=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
+[RUN] CMD=torchrun --standalone --nproc_per_node=2 run_glue_roberta_mtl_lora.py --output_dir /home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_24164 --epochs 2 --train_batch_size 8 --eval_batch_size 32 --grad_accum_steps 2 --learning_rate 2e-4 --warmup_ratio 0.06 --max_length 256 --lora_r 8 --lora_alpha 16 --lora_dropout 0.05 --num_B 3 --temperature 0.1 --save_pre_eval_ckpt --save_eval_details --eval_details_max_examples 200 
+[INFO] rank=0 world_size=2 local_rank=0
+[INFO] output_dir=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_24164
+[INFO] eval_only=False
+[INFO] device=cuda:0 use_amp=False
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[INFO] glue_disk_cache_dir=/home/christian.jesinghaus/.cache/huggingface/glue_disk_cache
+[INFO] hf_datasets_cache_dir=/home/christian.jesinghaus/.cache/huggingface/datasets
+[INFO] hf_token_present=yes

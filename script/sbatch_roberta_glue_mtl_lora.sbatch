@@ -3,10 +3,10 @@
 #SBATCH --partition=pascal
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
-#SBATCH --gres=gpu:2
+#SBATCH --gres=gpu:1
+#SBATCH --exclude=pascal-node01.l3s.intra,pascal-node03.l3s.intra
 #SBATCH --mem=32G
 #SBATCH --time=12:00:00
-#SBATCH --exclude=pascal-node01.l3s.intra,pascal-node03.l3s.intra
 #SBATCH --output=logs/%x.%j.out
 #SBATCH --error=logs/%x.%j.err
 #SBATCH --mail-type=END,FAIL
