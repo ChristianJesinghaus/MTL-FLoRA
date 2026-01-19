@@ -1,13 +1,0 @@
-Map:   0%|          | 0/1043 [00:00<?, ? examples/s]Map:  96%|█████████▌| 1000/1043 [00:00<00:00, 8131.25 examples/s]Map: 100%|██████████| 1043/1043 [00:00<00:00, 7705.47 examples/s]
-Traceback (most recent call last):
-  File "run_glue_roberta_mtl_lora.py", line 793, in <module>
-    main()
-  File "run_glue_roberta_mtl_lora.py", line 752, in main
-    scaler.step(optimizer)
-  File "/usr/local/lib/python3.8/dist-packages/torch/amp/grad_scaler.py", line 447, in step
-    self.unscale_(optimizer)
-  File "/usr/local/lib/python3.8/dist-packages/torch/amp/grad_scaler.py", line 337, in unscale_
-    optimizer_state["found_inf_per_device"] = self._unscale_grads_(
-  File "/usr/local/lib/python3.8/dist-packages/torch/amp/grad_scaler.py", line 259, in _unscale_grads_
-    raise ValueError("Attempting to unscale FP16 gradients.")
-ValueError: Attempting to unscale FP16 gradients.

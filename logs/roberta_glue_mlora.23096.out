@@ -1,7 +1,0 @@
-==========================================
-SLURM_JOB_ID = 23096
-SLURM_NODELIST = pascal-node02.l3s.intra
-==========================================
-[INFO] Job started on pascal-node02 at Tue Jan 13 06:57:48 PM CET 2026
-[INFO] SLURM_JOB_ID=23096
-[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA

@@ -1,2 +1,0 @@
-Map:   0%|          | 0/3668 [00:00<?, ? examples/s]Map:  27%|██▋       | 1000/3668 [00:00<00:00, 3706.14 examples/s]Map:  55%|█████▍    | 2000/3668 [00:00<00:00, 4242.24 examples/s]Map:  82%|████████▏ | 3000/3668 [00:00<00:00, 4512.14 examples/s]Map: 100%|██████████| 3668/3668 [00:00<00:00, 4630.07 examples/s]Map: 100%|██████████| 3668/3668 [00:00<00:00, 4424.24 examples/s]
-/home/christian.jesinghaus/FL/130126/MTL-LoRA/script/run_roberta_glue_mtl_lora.sh: line 104: MASTER_PORT: unbound variable

@@ -1,88 +1,0 @@
-==========================================
-SLURM_JOB_ID = 23836
-SLURM_NODELIST = pascal-node02.l3s.intra
-==========================================
-==========================================
-SLURM_JOB_ID = 23836
-SLURM_NODELIST = pascal-node02.l3s.intra
-==========================================
-[INFO] Job started on pascal-node02 at Thu Jan 15 10:15:06 AM CET 2026
-[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
-[INFO] LOAD_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446
-[INFO] EVAL_OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446/eval_runs/eval_23836
-[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
-[INFO] HF token present? yes
-[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA
-[INFO] CONTAINER=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
-[INFO] LOAD_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446
-[INFO] EVAL_OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446/eval_runs/eval_23836
-[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
-[INFO] HF token present? yes
-[INFO] Using Python inside container: python3
-Python 3.8.10
-[INFO] rank=0 world_size=1 local_rank=0
-[INFO] output_dir=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446/eval_runs/eval_23836
-[INFO] eval_only=True
-[INFO] device=cuda:0 use_amp=False
-[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
-[INFO] glue_disk_cache_dir=/home/christian.jesinghaus/.cache/huggingface/glue_disk_cache
-[INFO] hf_datasets_cache_dir=/home/christian.jesinghaus/.cache/huggingface/datasets
-[INFO] hf_token_present=yes
-[INFO] Replaced 48 Linear layers with mLoRALinear
-[INFO] Trainable params: 1,217,680 / 125,272,720 (0.9720%)
-[INFO] Trainable dtypes: ['torch.float32']
-[INFO] GLUE/cola: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_cola
-[INFO] GLUE/sst2: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_sst2
-[INFO] GLUE/mrpc: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_mrpc
-[INFO] GLUE/qqp: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_qqp
-[INFO] GLUE/mnli: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_mnli
-[INFO] GLUE/qnli: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_qnli
-[INFO] GLUE/rte: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_rte
-[INFO] GLUE/stsb: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_stsb
-[LOAD] adapter=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446/adapter_state_last.pt
-[LOAD] heads=/home/christian.jesinghaus/FL/130126/MTL-LoRA/outputs/roberta_glue_mlora_23446/heads_state_last.pt
-[LOAD] adapter missing keys (ignored): 197
-eval cola:validation:   0%|          | 0/33 [00:00<?, ?it/s]eval cola:validation: 100%|██████████| 33/33 [00:03<00:00,  8.80it/s]
-eval sst2:validation:   0%|          | 0/28 [00:00<?, ?it/s]eval sst2:validation: 100%|██████████| 28/28 [00:01<00:00, 14.64it/s]
-eval mrpc:validation:   0%|          | 0/13 [00:00<?, ?it/s]eval mrpc:validation: 100%|██████████| 13/13 [00:01<00:00,  9.19it/s]
-eval qqp:validation:   0%|          | 0/1264 [00:00<?, ?it/s]eval qqp:validation:   5%|▍         | 58/1264 [00:05<01:45, 11.44it/s]eval qqp:validation:   9%|▉         | 116/1264 [00:10<01:40, 11.41it/s]eval qqp:validation:  14%|█▍        | 175/1264 [00:15<01:34, 11.57it/s]eval qqp:validation:  19%|█▊        | 235/1264 [00:20<01:27, 11.74it/s]eval qqp:validation:  23%|██▎       | 295/1264 [00:25<01:21, 11.82it/s]eval qqp:validation:  28%|██▊       | 355/1264 [00:30<01:18, 11.57it/s]eval qqp:validation:  33%|███▎      | 413/1264 [00:35<01:13, 11.53it/s]eval qqp:validation:  37%|███▋      | 471/1264 [00:40<01:09, 11.44it/s]eval qqp:validation:  42%|████▏     | 529/1264 [00:46<01:04, 11.35it/s]eval qqp:validation:  47%|████▋     | 589/1264 [00:51<00:58, 11.54it/s]eval qqp:validation:  51%|█████▏    | 648/1264 [00:56<00:53, 11.61it/s]eval qqp:validation:  56%|█████▌    | 707/1264 [01:01<00:48, 11.60it/s]eval qqp:validation:  61%|██████    | 766/1264 [01:06<00:43, 11.43it/s]eval qqp:validation:  65%|██████▌   | 824/1264 [01:11<00:39, 11.18it/s]eval qqp:validation:  70%|██████▉   | 880/1264 [01:17<00:34, 11.06it/s]eval qqp:validation:  74%|███████▍  | 936/1264 [01:22<00:30, 10.88it/s]eval qqp:validation:  78%|███████▊  | 991/1264 [01:27<00:25, 10.87it/s]eval qqp:validation:  83%|████████▎ | 1046/1264 [01:32<00:20, 10.75it/s]eval qqp:validation:  87%|████████▋ | 1100/1264 [01:37<00:15, 10.72it/s]eval qqp:validation:  91%|█████████▏| 1154/1264 [01:43<00:10, 10.61it/s]eval qqp:validation:  96%|█████████▌| 1208/1264 [01:48<00:05, 10.53it/s]eval qqp:validation: 100%|█████████▉| 1261/1264 [01:53<00:00, 10.51it/s]eval qqp:validation: 100%|██████████| 1264/1264 [01:53<00:00, 11.12it/s]
-eval mnli:validation_matched:   0%|          | 0/307 [00:00<?, ?it/s]eval mnli:validation_matched:  13%|█▎        | 41/307 [00:05<00:32,  8.09it/s]eval mnli:validation_matched:  27%|██▋       | 82/307 [00:10<00:27,  8.04it/s]eval mnli:validation_matched:  40%|████      | 123/307 [00:15<00:23,  7.81it/s]eval mnli:validation_matched:  53%|█████▎    | 163/307 [00:20<00:18,  7.73it/s]eval mnli:validation_matched:  66%|██████▌   | 202/307 [00:26<00:13,  7.56it/s]eval mnli:validation_matched:  78%|███████▊  | 240/307 [00:31<00:09,  7.24it/s]eval mnli:validation_matched:  90%|█████████ | 277/307 [00:37<00:04,  7.13it/s]eval mnli:validation_matched: 100%|██████████| 307/307 [00:41<00:00,  7.48it/s]
-eval mnli:validation_mismatched:   0%|          | 0/308 [00:00<?, ?it/s]eval mnli:validation_mismatched:  13%|█▎        | 39/308 [00:05<00:35,  7.68it/s]eval mnli:validation_mismatched:  25%|██▌       | 78/308 [00:10<00:31,  7.28it/s]eval mnli:validation_mismatched:  37%|███▋      | 115/308 [00:15<00:26,  7.27it/s]eval mnli:validation_mismatched:  51%|█████     | 156/308 [00:20<00:19,  7.61it/s]eval mnli:validation_mismatched:  63%|██████▎   | 195/308 [00:26<00:15,  7.39it/s]eval mnli:validation_mismatched:  76%|███████▌  | 233/308 [00:31<00:10,  7.21it/s]eval mnli:validation_mismatched:  88%|████████▊ | 270/308 [00:37<00:05,  7.17it/s]eval mnli:validation_mismatched:  99%|█████████▉| 306/308 [00:42<00:00,  6.97it/s]eval mnli:validation_mismatched: 100%|██████████| 308/308 [00:42<00:00,  7.21it/s]
-eval qnli:validation:   0%|          | 0/171 [00:00<?, ?it/s]eval qnli:validation:  18%|█▊        | 31/171 [00:05<00:22,  6.17it/s]eval qnli:validation:  38%|███▊      | 65/171 [00:10<00:16,  6.48it/s]eval qnli:validation:  57%|█████▋    | 98/171 [00:15<00:11,  6.34it/s]eval qnli:validation:  76%|███████▌  | 130/171 [00:20<00:06,  6.30it/s]eval qnli:validation:  96%|█████████▌| 164/171 [00:25<00:01,  6.46it/s]eval qnli:validation: 100%|██████████| 171/171 [00:26<00:00,  6.44it/s]
-eval rte:validation:   0%|          | 0/9 [00:00<?, ?it/s]eval rte:validation: 100%|██████████| 9/9 [00:02<00:00,  3.34it/s]
-eval stsb:validation:   0%|          | 0/47 [00:00<?, ?it/s]eval stsb:validation: 100%|██████████| 47/47 [00:03<00:00, 13.09it/s]
-[eval_only] results:
-{
-  "cola": {
-    "validation_mcc": 0.5157664784865402
-  },
-  "sst2": {
-    "validation_acc": 0.9369266055045872
-  },
-  "mrpc": {
-    "validation_acc": 0.8529411764705882,
-    "validation_f1": 0.8943661971830986
-  },
-  "qqp": {
-    "validation_acc": 0.879495424189958,
-    "validation_f1": 0.8411684162482884
-  },
-  "mnli": {
-    "validation_matched_acc": 0.8581762608252674,
-    "validation_mismatched_acc": 0.8556753458096013,
-    "validation_avg_acc": 0.8569258033174343
-  },
-  "qnli": {
-    "validation_acc": 0.909573494416987
-  },
-  "rte": {
-    "validation_acc": 0.7256317689530686
-  },
-  "stsb": {
-    "validation_pearson": 0.9015977145699315
-  },
-  "glue_avg": {
-    "avg": 0.822357308238637
-  }
-}
-[INFO] Eval job finished at Thu Jan 15 10:20:41 CET 2026

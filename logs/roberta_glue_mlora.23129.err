@@ -1,49 +1,0 @@
-Map:   0%|          | 0/67349 [00:00<?, ? examples/s]Map:   1%|▏         | 1000/67349 [00:00<00:08, 7792.05 examples/s]Map:   4%|▍         | 3000/67349 [00:00<00:06, 10633.60 examples/s]Map:   7%|▋         | 5000/67349 [00:00<00:05, 11701.33 examples/s]Map:  10%|█         | 7000/67349 [00:00<00:04, 12195.10 examples/s]Map:  13%|█▎        | 9000/67349 [00:00<00:07, 8329.78 examples/s] Map:  16%|█▋        | 11000/67349 [00:01<00:05, 9419.75 examples/s]Map:  19%|█▉        | 13000/67349 [00:01<00:05, 10376.01 examples/s]Map:  22%|██▏       | 15000/67349 [00:01<00:04, 10975.30 examples/s]Map:  25%|██▌       | 17000/67349 [00:01<00:04, 11583.19 examples/s]Map:  28%|██▊       | 19000/67349 [00:01<00:04, 12012.63 examples/s]Map:  31%|███       | 21000/67349 [00:01<00:03, 12267.48 examples/s]Map:  34%|███▍      | 23000/67349 [00:02<00:03, 12491.51 examples/s]Map:  37%|███▋      | 25000/67349 [00:02<00:03, 12506.45 examples/s]Map:  40%|████      | 27000/67349 [00:02<00:03, 12685.84 examples/s]Map:  43%|████▎     | 29000/67349 [00:02<00:03, 12715.02 examples/s]Map:  46%|████▌     | 31000/67349 [00:02<00:02, 12834.31 examples/s]Map:  49%|████▉     | 33000/67349 [00:02<00:02, 12810.92 examples/s]Map:  52%|█████▏    | 35000/67349 [00:02<00:02, 12757.01 examples/s]Map:  55%|█████▍    | 37000/67349 [00:03<00:02, 12822.92 examples/s]Map:  58%|█████▊    | 39000/67349 [00:03<00:02, 12949.84 examples/s]Map:  61%|██████    | 41000/67349 [00:03<00:02, 12982.96 examples/s]Map:  64%|██████▍   | 43000/67349 [00:03<00:01, 13003.60 examples/s]Map:  67%|██████▋   | 45000/67349 [00:03<00:01, 13015.53 examples/s]Map:  70%|██████▉   | 47000/67349 [00:03<00:01, 12885.11 examples/s]Map:  73%|███████▎  | 49000/67349 [00:04<00:01, 12960.75 examples/s]Map:  76%|███████▌  | 51000/67349 [00:04<00:01, 12981.71 examples/s]Map:  79%|███████▊  | 53000/67349 [00:04<00:01, 13025.13 examples/s]Map:  82%|████████▏ | 55000/67349 [00:04<00:01, 9778.22 examples/s] Map:  85%|████████▍ | 57000/67349 [00:04<00:00, 10357.67 examples/s]Map:  88%|████████▊ | 59000/67349 [00:05<00:00, 11009.29 examples/s]Map:  91%|█████████ | 61000/67349 [00:05<00:00, 11512.73 examples/s]Map:  94%|█████████▎| 63000/67349 [00:05<00:00, 11960.62 examples/s]Map:  97%|█████████▋| 65000/67349 [00:05<00:00, 12213.96 examples/s]Map:  99%|█████████▉| 67000/67349 [00:05<00:00, 12475.16 examples/s]Map: 100%|██████████| 67349/67349 [00:05<00:00, 11864.64 examples/s]
-Traceback (most recent call last):
-  File "run_glue_roberta_mtl_lora.py", line 680, in <module>
-    main()
-  File "run_glue_roberta_mtl_lora.py", line 630, in main
-    logits = model(task=task, batch=batch)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "run_glue_roberta_mtl_lora.py", line 415, in forward
-    outputs = self.encoder(**batch)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/transformers/src/transformers/models/roberta/modeling_roberta.py", line 832, in forward
-    encoder_outputs = self.encoder(
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/transformers/src/transformers/models/roberta/modeling_roberta.py", line 521, in forward
-    layer_outputs = layer_module(
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/transformers/src/transformers/models/roberta/modeling_roberta.py", line 410, in forward
-    self_attention_outputs = self.attention(
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/transformers/src/transformers/models/roberta/modeling_roberta.py", line 337, in forward
-    self_outputs = self.self(
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/transformers/src/transformers/models/roberta/modeling_roberta.py", line 187, in forward
-    mixed_query_layer = self.query(hidden_states)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1532, in _wrapped_call_impl
-    return self._call_impl(*args, **kwargs)
-  File "/usr/local/lib/python3.8/dist-packages/torch/nn/modules/module.py", line 1541, in _call_impl
-    return forward_call(*args, **kwargs)
-  File "/home/christian.jesinghaus/FL/130126/MTL-LoRA/src/adapter/mlora.py", line 215, in forward
-    task_B = lora_B_w @ self.lora_B.view((B_num, -1))
-RuntimeError: CUDA error: CUBLAS_STATUS_EXECUTION_FAILED when calling `cublasSgemm( handle, opa, opb, m, n, k, &alpha, a, lda, b, ldb, &beta, c, ldc)`

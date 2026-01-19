@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""Train RoBERTa + (MTL-)mLoRA on multi-task GLUE (SINGLE GPU).
+
+This is the single-GPU refactor of the monolithic DDP script.
+- no torch.distributed
+- no DDP / torchrun
+- keeps GLUE disk caching and the same evaluation prompts (unchanged)
+- trains: LoRA params + task heads + (optionally) all bias + all LayerNorm
+
+Outputs (in --output_dir):
+- checkpoints/ckpt_*.pt
+- adapter_state*.pt (trainable encoder params: LoRA (+bias/LN if enabled))
+- heads_state*.pt
+- eval_latest.json / eval_epoch_*.json
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+
+import torch
+
+from src.roberta_glue_mtl_mlora.data import build_dataloaders
+from src.roberta_glue_mtl_mlora.factory import create_model, create_tokenizer
+from src.roberta_glue_mtl_mlora.hf_utils import default_hf_home, get_hf_token
+from src.roberta_glue_mtl_mlora.model import (
+    cast_trainable_params_to_fp32,
+  #  count_trainable_params,
+    set_trainable_params,
+)
+from src.roberta_glue_mtl_mlora.train_loop import train
+from src.roberta_glue_mtl_mlora.utils import set_seed
+
+
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser()
+
+    # Model / output
+    p.add_argument("--model_name", type=str, default="roberta-base")
+    p.add_argument("--output_dir", type=str, default="./outputs_roberta_glue_mlora_sgpu")
+    p.add_argument("--seed", type=int, default=42)
+
+    # Training hyperparams (defaults tuned for 1080 Ti)
+    p.add_argument("--epochs", type=int, default=1)
+    p.add_argument("--train_batch_size", type=int, default=8)
+    p.add_argument("--eval_batch_size", type=int, default=32)
+    p.add_argument("--grad_accum_steps", type=int, default=2)
+    p.add_argument("--learning_rate", type=float, default=2e-4)
+    p.add_argument("--warmup_ratio", type=float, default=0.06)
+    p.add_argument("--max_length", type=int, default=256)
+    p.add_argument("--num_workers", type=int, default=2)
+
+    # Mixed precision
+    p.add_argument("--fp16", action="store_true", help="Enable CUDA AMP (fp16 autocast + GradScaler).")
+
+    # LoRA / mLoRA hyperparams
+    p.add_argument("--lora_r", type=int, default=8)
+    p.add_argument("--lora_alpha", type=int, default=16)
+    p.add_argument("--lora_dropout", type=float, default=0.05)
+    p.add_argument("--num_B", type=int, default=3)
+    p.add_argument("--temperature", type=float, default=0.1)
+
+    # Which additional params to train
+    p.add_argument(
+        "--freeze_bias",
+        action="store_true",
+        help="By default, all bias params are TRAINED. Pass this flag to keep them frozen.",
+    )
+    p.add_argument(
+        "--freeze_layernorm",
+        action="store_true",
+        help="By default, all LayerNorm params are TRAINED. Pass this flag to keep them frozen.",
+    )
+
+    # Checkpointing
+    p.add_argument("--save_steps", type=int, default=2500, help="Save training checkpoint every N update steps.")
+    p.add_argument("--save_total_limit", type=int, default=2)
+    p.add_argument("--save_pre_eval_ckpt", action="store_true")
+    p.add_argument("--resume_from_ckpt", type=str, default=None)
+
+    # HF / dataset cache
+    p.add_argument("--offline", action="store_true")
+    p.add_argument("--hf_token", type=str, default=None)
+    p.add_argument("--glue_disk_cache_dir", type=str, default=None)
+    p.add_argument("--hf_datasets_cache_dir", type=str, default=None)
+
+    # Eval details dump
+    p.add_argument("--skip_eval", action="store_true", help="Skip evaluation after epochs.")
+    p.add_argument("--save_eval_details", action="store_true", help="Write per-example JSONL.")
+    p.add_argument("--eval_details_max_examples", type=int, default=200, help="Max examples per split. Use -1 for all.")
+    p.add_argument("--eval_details_only_errors", action="store_true")
+    p.add_argument("--eval_details_topk", type=int, default=2)
+    p.add_argument("--stsb_abs_err_threshold", type=float, default=0.5)
+
+    return p.parse_args()
+
+
+def main() -> None:
+    args = parse_args()
+
+    os.makedirs(args.output_dir, exist_ok=True)
+    os.makedirs(os.path.join(args.output_dir, "checkpoints"), exist_ok=True)
+
+    set_seed(args.seed)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    use_amp = bool(args.fp16 and device.type == "cuda")
+
+    # HF config
+    hf_token = get_hf_token(args.hf_token)
+    hf_home = default_hf_home()
+    glue_disk_cache_dir = args.glue_disk_cache_dir or os.path.join(hf_home, "glue_disk_cache")
+    hf_datasets_cache_dir = args.hf_datasets_cache_dir or os.environ.get("HF_DATASETS_CACHE") or None
+
+    print(f"[INFO] device={device} use_amp={use_amp}")
+    print(f"[INFO] output_dir={args.output_dir}")
+    print(f"[INFO] HF_HOME={hf_home}")
+    print(f"[INFO] glue_disk_cache_dir={glue_disk_cache_dir}")
+    print(f"[INFO] hf_datasets_cache_dir={hf_datasets_cache_dir}")
+    print(f"[INFO] hf_token_present={'yes' if hf_token else 'no'}")
+
+    tokenizer = create_tokenizer(args.model_name, offline=args.offline)
+    model = create_model(
+        model_name=args.model_name,
+        offline=args.offline,
+        device=device,
+        lora_r=args.lora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        num_B=args.num_B,
+        temperature=args.temperature,
+    )
+
+    # Trainable params selection
+    train_bias = not args.freeze_bias
+    train_ln = not args.freeze_layernorm
+    set_trainable_params(model, train_bias=train_bias, train_layernorm=train_ln)
+    cast_trainable_params_to_fp32(model)
+
+   # trainable, total, pct = count_trainable_params(model)
+   # print(f"[INFO] Trainable params: {trainable:,} / {total:,} ({pct:.4f}%)")
+    print(f"[INFO] train_bias={train_bias} train_layernorm={train_ln}")
+
+    # Data
+    task_data = build_dataloaders(
+        tokenizer,
+        max_length=args.max_length,
+        train_batch_size=args.train_batch_size,
+        eval_batch_size=args.eval_batch_size,
+        num_workers=args.num_workers,
+        seed=args.seed,
+        hf_datasets_cache_dir=hf_datasets_cache_dir,
+        glue_disk_cache_dir=glue_disk_cache_dir,
+        hf_token=hf_token,
+        offline=args.offline,
+        save_eval_details=args.save_eval_details,
+    )
+
+    # Train (optimizer/scheduler/scaler + resume logic live in train_loop.train)
+    train(
+        model=model,
+        task_data=task_data,
+        device=device,
+        use_amp=use_amp,
+        output_dir=args.output_dir,
+        epochs=args.epochs,
+        grad_accum_steps=args.grad_accum_steps,
+        learning_rate=args.learning_rate,
+        warmup_ratio=args.warmup_ratio,
+        save_steps=args.save_steps,
+        save_total_limit=args.save_total_limit,
+        save_pre_eval_ckpt=args.save_pre_eval_ckpt,
+        eval_every_epoch=(not args.skip_eval),
+        save_eval_details=args.save_eval_details,
+        eval_details_max_examples=args.eval_details_max_examples,
+        eval_details_only_errors=args.eval_details_only_errors,
+        eval_details_topk=args.eval_details_topk,
+        stsb_abs_err_threshold=args.stsb_abs_err_threshold,
+        resume_from_ckpt=args.resume_from_ckpt,
+        args_for_ckpt=args,
+    )
+
+    # Save run config
+    with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:
+        json.dump(vars(args), f, indent=2)
+
+
+if __name__ == "__main__":
+    main()
