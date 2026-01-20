@@ -1,0 +1,33 @@
+{
+  "cola": {
+    "validation_mcc": 0.4940817154665181
+  },
+  "sst2": {
+    "validation_acc": 0.9311926605504587
+  },
+  "mrpc": {
+    "validation_acc": 0.8553921568627451,
+    "validation_f1": 0.8998302207130731
+  },
+  "qqp": {
+    "validation_acc": 0.8899826861241652,
+    "validation_f1": 0.8585421702073528
+  },
+  "mnli": {
+    "validation_matched_acc": 0.8674477840040754,
+    "validation_mismatched_acc": 0.8649308380797396,
+    "validation_avg_acc": 0.8661893110419074
+  },
+  "qnli": {
+    "validation_acc": 0.9196412227713711
+  },
+  "rte": {
+    "validation_acc": 0.7942238267148014
+  },
+  "stsb": {
+    "validation_pearson": 0.9026876390169354
+  },
+  "glue_avg": {
+    "avg": 0.8316739023186127
+  }
+}

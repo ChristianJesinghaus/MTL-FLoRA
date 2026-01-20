@@ -1,0 +1,120 @@
+==========================================
+SLURM_JOB_ID = 24763
+SLURM_NODELIST = pascal-node01.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID   = 24763
+SLURM_NODELIST = pascal-node01.l3s.intra
+CUDA_VISIBLE_DEVICES = 0
+==========================================
+[INFO] Job started on pascal-node01 at Mon Jan 19 12:59:40 PM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA/script
+[RUN] OUT_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763
+[RUN] REPO_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[RUN] CONTAINER_IMAGE=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
+[RUN] OMP_NUM_THREADS=16
+[RUN] CMD=python3 -u run_glue_roberta_mtl_mlora_train_single_gpu.py --output_dir /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763 --epochs 1 --train_batch_size 8 --eval_batch_size 32 --grad_accum_steps 2 --learning_rate 2e-4 --warmup_ratio 0.06 --max_length 256 --freeze_bias --freeze_layernorm --lora_r 8 --lora_alpha 16 --lora_dropout 0.05 --num_B 3 --temperature 0.1 --fp16 --save_pre_eval_ckpt --save_eval_details --eval_details_max_examples 200 
+[RUN] REPO_DIR=/home/christian.jesinghaus/FL/130126/MTL-LoRA
+[RUN] CONTAINER_IMAGE=/home/christian.jesinghaus/FL/130126/MTL-LoRA/docker_1.sif
+[RUN] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[RUN] CUDA_VISIBLE_DEVICES=0
+[RUN] OMP_NUM_THREADS=16
+[RUN] CMD=cd '/home/christian.jesinghaus/FL/130126/MTL-LoRA' && python3 -u run_glue_roberta_mtl_mlora_train_single_gpu.py --output_dir /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763 --epochs 1 --train_batch_size 8 --eval_batch_size 32 --grad_accum_steps 2 --learning_rate 2e-4 --warmup_ratio 0.06 --max_length 256 --freeze_bias --freeze_layernorm --lora_r 8 --lora_alpha 16 --lora_dropout 0.05 --num_B 3 --temperature 0.1 --fp16 --save_pre_eval_ckpt --save_eval_details --eval_details_max_examples 200 
+[INFO] device=cuda use_amp=True
+[INFO] output_dir=/home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763
+[INFO] HF_HOME=/home/christian.jesinghaus/.cache/huggingface
+[INFO] glue_disk_cache_dir=/home/christian.jesinghaus/.cache/huggingface/glue_disk_cache
+[INFO] hf_datasets_cache_dir=/home/christian.jesinghaus/.cache/huggingface/datasets
+[INFO] hf_token_present=yes
+[INFO] Replaced 48 Linear layers with mLoRALinear
+[INFO] train_bias=False train_layernorm=False
+[INFO] GLUE/cola: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_cola
+[INFO] GLUE/sst2: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_sst2
+[INFO] GLUE/mrpc: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_mrpc
+[INFO] GLUE/qqp: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_qqp
+[INFO] GLUE/mnli: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_mnli
+[INFO] GLUE/qnli: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_qnli
+[INFO] GLUE/rte: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_rte
+[INFO] GLUE/stsb: loading from disk cache: /home/christian.jesinghaus/.cache/huggingface/glue_disk_cache/glue_stsb
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step2500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step5000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step7500.pt
+[CKPT] removed old checkpoint: ckpt_train_step2500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step10000.pt
+[CKPT] removed old checkpoint: ckpt_train_step5000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step12500.pt
+[CKPT] removed old checkpoint: ckpt_train_step7500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step15000.pt
+[CKPT] removed old checkpoint: ckpt_train_step10000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step17500.pt
+[CKPT] removed old checkpoint: ckpt_train_step12500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step20000.pt
+[CKPT] removed old checkpoint: ckpt_train_step15000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step22500.pt
+[CKPT] removed old checkpoint: ckpt_train_step17500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step25000.pt
+[CKPT] removed old checkpoint: ckpt_train_step20000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step27500.pt
+[CKPT] removed old checkpoint: ckpt_train_step22500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step30000.pt
+[CKPT] removed old checkpoint: ckpt_train_step25000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step32500.pt
+[CKPT] removed old checkpoint: ckpt_train_step27500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step35000.pt
+[CKPT] removed old checkpoint: ckpt_train_step30000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step37500.pt
+[CKPT] removed old checkpoint: ckpt_train_step32500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step40000.pt
+[CKPT] removed old checkpoint: ckpt_train_step35000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step42500.pt
+[CKPT] removed old checkpoint: ckpt_train_step37500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step45000.pt
+[CKPT] removed old checkpoint: ckpt_train_step40000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step47500.pt
+[CKPT] removed old checkpoint: ckpt_train_step42500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step50000.pt
+[CKPT] removed old checkpoint: ckpt_train_step45000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step52500.pt
+[CKPT] removed old checkpoint: ckpt_train_step47500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step55000.pt
+[CKPT] removed old checkpoint: ckpt_train_step50000.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_train_step57500.pt
+[CKPT] removed old checkpoint: ckpt_train_step52500.pt
+[CKPT] saved /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763/checkpoints/ckpt_epoch1_pre_eval_step59320.pt
+[CKPT] removed old checkpoint: ckpt_train_step55000.pt
+[eval] epoch=1/1
+{
+  "cola": {
+    "validation_mcc": 0.5081463378939296
+  },
+  "sst2": {
+    "validation_acc": 0.9220183486238532
+  },
+  "mrpc": {
+    "validation_acc": 0.8627450980392157,
+    "validation_f1": 0.9024390243902439
+  },
+  "qqp": {
+    "validation_acc": 0.8798417017066534,
+    "validation_f1": 0.8406167979002624
+  },
+  "mnli": {
+    "validation_matched_acc": 0.8578706062149771,
+    "validation_mismatched_acc": 0.8610659072416599,
+    "validation_avg_acc": 0.8594682567283185
+  },
+  "qnli": {
+    "validation_acc": 0.9104887424492037
+  },
+  "rte": {
+    "validation_acc": 0.7581227436823105
+  },
+  "stsb": {
+    "validation_pearson": 0.908072693750876
+  },
+  "glue_avg": {
+    "avg": 0.8261129903592951
+  }
+}
+[INFO] Saved adapter/head weights to /home/christian.jesinghaus/FL/130126/MTL-LoRA/script/outputs/roberta_glue_mlora_1gpu_24763
+[INFO] Job finished at Mon Jan 19 15:35:36 CET 2026

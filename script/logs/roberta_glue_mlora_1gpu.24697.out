@@ -1,0 +1,11 @@
+==========================================
+SLURM_JOB_ID = 24697
+SLURM_NODELIST = pascal-node01.l3s.intra
+==========================================
+==========================================
+SLURM_JOB_ID   = 24697
+SLURM_NODELIST = pascal-node01.l3s.intra
+CUDA_VISIBLE_DEVICES = 0
+==========================================
+[INFO] Job started on pascal-node01 at Mon Jan 19 11:20:17 AM CET 2026
+[INFO] REPO_ROOT=/home/christian.jesinghaus/FL/130126/MTL-LoRA/script
