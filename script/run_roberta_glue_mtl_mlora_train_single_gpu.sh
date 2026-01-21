@@ -45,6 +45,14 @@ ARGS=(
   # Eval details dump (optional)
   --save_eval_details
   --eval_details_max_examples 200
+
+  # Federated learning settings
+  --num_fl_rounds 1
+  --num_clients 2
+  --dirichlet_alpha 1.0
+
+  # Test mode (set via EXTRA_ARGS if needed)
+  # --test
 )
 
 CMD=(python3 -u "${SCRIPT}" "${ARGS[@]}" "${EXTRA_ARGS[@]}")

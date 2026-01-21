@@ -9,12 +9,12 @@ from typing import Dict, List, Optional, Tuple
 GLUE_TASKS: List[str] = [
     "cola",
     "sst2",
-    "mrpc",
-    "qqp",
-    "mnli",
-    "qnli",
-    "rte",
-    "stsb",
+#    "mrpc",
+#    "qqp",
+#    "mnli",
+#    "qnli",
+#    "rte",
+#    "stsb",
 ]
 
 TASK_TO_ID: Dict[str, int] = {task: i for i, task in enumerate(GLUE_TASKS)}
@@ -50,6 +50,9 @@ FALLBACK_LABEL_NAMES: Dict[str, Dict[int, str]] = {
     "qnli": {0: "entailment", 1: "not_entailment"},
     "rte": {0: "entailment", 1: "not_entailment"},
 }
+
+# Test mode configuration
+TEST_SAMPLE_SIZE: int = 50  # Number of samples per client per task in test mode
 
 # RoBERTa/BERT-style attention linears we adapt with (m)LoRA.
 # Note: these are substrings used to match module names.

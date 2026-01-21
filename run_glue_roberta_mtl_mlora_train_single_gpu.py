@@ -17,6 +17,7 @@ Outputs (in --output_dir):
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import os
 
@@ -94,8 +95,69 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eval_details_topk", type=int, default=2)
     p.add_argument("--stsb_abs_err_threshold", type=float, default=0.5)
 
+    # Federated learning settings
+    p.add_argument("--num_fl_rounds", type=int, default=1, help="Number of federated learning rounds.")
+    p.add_argument("--num_clients", type=int, default=1, help="Number of clients to simulate (1 = no FL).")
+    p.add_argument("--dirichlet_alpha", type=float, default=1.0, help="Dirichlet alpha for non-IID data split (lower = more heterogeneous).")
+
+    # Test mode
+    p.add_argument("--test", action="store_true", help="Enable test mode: only load 50 samples per client per task.")
+
     return p.parse_args()
 
+def fine_tune_client(model: torch.nn.Module, client_data: dict, device: torch.device, use_amp=False, args: argparse.Namespace) -> Dict[str, torch.Tensor]:
+    train(
+    model=model,
+    task_data=client_data,
+    device=device,
+    use_amp=use_amp,
+    output_dir=args.output_dir,
+    epochs=args.epochs,
+    grad_accum_steps=args.grad_accum_steps,
+    learning_rate=args.learning_rate,
+    warmup_ratio=args.warmup_ratio,
+    save_steps=args.save_steps,
+    save_total_limit=args.save_total_limit,
+    save_pre_eval_ckpt=args.save_pre_eval_ckpt,
+    eval_every_epoch=(not args.skip_eval),
+    save_eval_details=args.save_eval_details,
+    eval_details_max_examples=args.eval_details_max_examples,
+    eval_details_only_errors=args.eval_details_only_errors,
+    eval_details_topk=args.eval_details_topk,
+    stsb_abs_err_threshold=args.stsb_abs_err_threshold,
+    resume_from_ckpt=args.resume_from_ckpt,
+    args_for_ckpt=args,
+    )
+    client_lora_weights = {name: param.detach().cpu().clone() for name, param in model.named_parameters() if 'lora' in name}
+    print(f"[DEBUG] fine_tune_client: Extracted {len(client_lora_weights)} LoRA weight matrices")
+    for name, tensor in list(client_lora_weights.items())[:3]:  # Print first 3 for brevity
+        print(f"  {name}: shape={tensor.shape}")
+    return client_lora_weights
+
+# Federated Averaging function for LoRA weights
+def fed_avg(client_weights):
+    print(f"[DEBUG] fed_avg: Averaging {len(client_weights)} client weight sets")
+    avg_weights = copy.deepcopy(client_weights[0])
+    print(f"[DEBUG] fed_avg: Total parameters to average: {len(avg_weights)}")
+    for key in avg_weights.keys():
+        for i in range(1, len(client_weights)):
+            avg_weights[key] += client_weights[i][key]
+        avg_weights[key] = avg_weights[key] / len(client_weights)
+    print(f"[DEBUG] fed_avg: Averaged weights (first 3 for brevity)")
+    for name, tensor in list(avg_weights.items())[:3]:
+        print(f"  {name}: shape={tensor.shape}, dtype={tensor.dtype}")
+    return avg_weights
+
+# Apply aggregated weights to global model
+def update_global_model(global_model, avg_weights):
+    updated_count = 0
+    with torch.no_grad():
+        for name, param in global_model.named_parameters():
+            if name in avg_weights:
+                print(f"[DEBUG] update_global_model: Updating {name}, shape={param.shape}")
+                param.copy_(avg_weights[name])
+                updated_count += 1
+    print(f"[DEBUG] update_global_model: Updated {updated_count} parameters in global model")
 
 def main() -> None:
     args = parse_args()
@@ -156,31 +218,30 @@ def main() -> None:
         hf_token=hf_token,
         offline=args.offline,
         save_eval_details=args.save_eval_details,
-    )
+        num_clients=args.num_clients,
+        dirichlet_alpha=args.dirichlet_alpha, # Lower = more non-IID (0.1 is very heterogeneous)
+        test_mode=args.test,
+    ) # -> List[Dict[str, TaskData]]
 
     # Train (optimizer/scheduler/scaler + resume logic live in train_loop.train)
-    train(
-        model=model,
-        task_data=task_data,
-        device=device,
-        use_amp=use_amp,
-        output_dir=args.output_dir,
-        epochs=args.epochs,
-        grad_accum_steps=args.grad_accum_steps,
-        learning_rate=args.learning_rate,
-        warmup_ratio=args.warmup_ratio,
-        save_steps=args.save_steps,
-        save_total_limit=args.save_total_limit,
-        save_pre_eval_ckpt=args.save_pre_eval_ckpt,
-        eval_every_epoch=(not args.skip_eval),
-        save_eval_details=args.save_eval_details,
-        eval_details_max_examples=args.eval_details_max_examples,
-        eval_details_only_errors=args.eval_details_only_errors,
-        eval_details_topk=args.eval_details_topk,
-        stsb_abs_err_threshold=args.stsb_abs_err_threshold,
-        resume_from_ckpt=args.resume_from_ckpt,
-        args_for_ckpt=args,
-    )
+    # FL training loop
+    for round in range(args.num_fl_rounds):
+        print(f"[INFO] Starting FL round {round+1}/{args.num_fl_rounds}")
+        client_weights = []
+        for client_id in range(args.num_clients):
+            print(f"[INFO] Fine-tuning client {client_id+1}/{args.num_clients}")
+            client_model = copy.deepcopy(model)
+            client_data = task_data[client_id]
+            client_lora_weights = fine_tune_client(client_model, client_data, device, use_amp, args)
+            print(f"[DEBUG] FL round {round+1}: Client {client_id+1} returned {len(client_lora_weights)} LoRA matrices")
+            client_weights.append(client_lora_weights)
+        # Aggregate weights
+        print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
+        avg_weights = fed_avg(client_weights)
+        # Update global model
+        print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated weights")
+        update_global_model(model, avg_weights)
+        print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
 
     # Save run config
     with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:
