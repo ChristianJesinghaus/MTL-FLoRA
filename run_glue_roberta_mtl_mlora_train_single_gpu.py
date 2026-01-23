@@ -105,7 +105,7 @@ def parse_args() -> argparse.Namespace:
 
     return p.parse_args()
 
-def fine_tune_client(model: torch.nn.Module, client_data: dict, device: torch.device, use_amp=False, args: argparse.Namespace) -> Dict[str, torch.Tensor]:
+def fine_tune_client(model: torch.nn.Module, client_data: dict, device: torch.device, args: argparse.Namespace, use_amp=False) -> Dict[str, torch.Tensor]:
     train(
     model=model,
     task_data=client_data,
@@ -232,7 +232,7 @@ def main() -> None:
             print(f"[INFO] Fine-tuning client {client_id+1}/{args.num_clients}")
             client_model = copy.deepcopy(model)
             client_data = task_data[client_id]
-            client_lora_weights = fine_tune_client(client_model, client_data, device, use_amp, args)
+            client_lora_weights = fine_tune_client(client_model, client_data, device, args, use_amp)
             print(f"[DEBUG] FL round {round+1}: Client {client_id+1} returned {len(client_lora_weights)} LoRA matrices")
             client_weights.append(client_lora_weights)
         # Aggregate weights

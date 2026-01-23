@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
+set -euo pipefail
 #SBATCH --job-name=roberta_glue_mlora_1gpu
 #SBATCH --partition=pascal
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
 #SBATCH --mem=32G
-#SBATCH --time=01:00:00
+#SBATCH --time=00:01:00
 #SBATCH --output=logs/%x.%j.out
 #SBATCH --error=logs/%x.%j.err
 #SBATCH --mail-type=END,FAIL
 
+trap 'echo "[ERROR] Script failed at line $LINENO: $BASH_COMMAND" >&2' ERR
 
 REPO_ROOT="${SLURM_SUBMIT_DIR}"
 cd "${REPO_ROOT}"
@@ -51,6 +53,9 @@ fi
 
 OUT_DIR="${REPO_ROOT}/outputs/roberta_glue_mlora_1gpu_${SLURM_JOB_ID}"
 mkdir -p "${OUT_DIR}"
+
+echo "[INFO] OUT_DIR=${OUT_DIR}"
+echo "[INFO] Calling: bash \"${REPO_ROOT}/script/run_roberta_glue_mtl_mlora_train_single_gpu.sh\" \"${OUT_DIR}\""
 
 bash "${REPO_ROOT}/script/run_roberta_glue_mtl_mlora_train_single_gpu.sh" "${OUT_DIR}"
 

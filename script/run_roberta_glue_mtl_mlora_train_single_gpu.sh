@@ -18,7 +18,7 @@ SCRIPT="run_glue_roberta_mtl_mlora_train_single_gpu.py"
 # Default args (you can override by passing the same flags in EXTRA_ARGS)
 ARGS=(
   --output_dir "${OUT_DIR}"
-  --epochs 3
+  --epochs 1
   --train_batch_size 8
   --eval_batch_size 32
   --grad_accum_steps 2
@@ -52,7 +52,7 @@ ARGS=(
   --dirichlet_alpha 1.0
 
   # Test mode (set via EXTRA_ARGS if needed)
-  # --test
+  --test
 )
 
 CMD=(python3 -u "${SCRIPT}" "${ARGS[@]}" "${EXTRA_ARGS[@]}")
