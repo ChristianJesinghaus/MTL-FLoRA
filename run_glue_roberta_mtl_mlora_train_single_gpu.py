@@ -20,6 +20,8 @@ import argparse
 import copy
 import json
 import os
+import re
+from collections import defaultdict
 
 import torch
 
@@ -148,6 +150,80 @@ def fed_avg(client_weights):
         print(f"  {name}: shape={tensor.shape}, dtype={tensor.dtype}")
     return avg_weights
 
+def stack_A(client_A, hidden, lora_r):
+    stacked = dict.fromkeys(client_A[0], torch.zeros([1, lora_r, hidden]))
+    # TODO implement stacking
+    return stacked
+
+def stack_B(client_B, num_B, hidden, lora_r):
+    stacked = dict.fromkeys(client_B[0], torch.zeros([num_B, hidden, lora_r]))
+    # TODO implement stacking
+    return stacked
+
+
+def stack_lambdas(client_lambdas, num_tasks, lora_r):
+    stacked = dict.fromkeys(client_lambdas[0], torch.zeros([num_tasks, lora_r, lora_r]))
+    # TODO implement stacking
+    return stacked
+
+def avg_B_w(client_B_w, num_tasks, num_B):
+    avg = dict.fromkeys(client_B_w[0], torch.zeros([num_tasks, num_B]))
+    # TODO implement FedIT
+    return avg
+
+def aggregate_mtl_weights(client_weights, hidden=768, num_B=3, num_tasks=2, lora_r=8):
+    # TODO debug
+    # TODO add device and dtype handling for LoRA tensors
+    client_A = []
+    client_B = []
+    client_lambdas = []
+    client_B_w = []
+
+    for weights in client_weights:
+        client_A.append({k: v for k, v in weights.items() if k.endswith("lora_A")})
+        client_B.append({k: v for k, v in weights.items() if k.endswith("lora_B")})
+        client_lambdas.append({k: v for k, v in weights.items() if k.endswith("lora_lambdas")})
+        client_B_w.append({k: v for k, v in weights.items() if k.endswith("lora_B_w")})
+    
+    print(f"[DEBUG] aggregate_mtl_weights: client_A[0]:{client_A[0]}")
+
+    r_stacked = lora_r * len(client_weights)
+    a_stacked = stack_A(client_A, hidden, r_stacked)
+    b_stacked = stack_B(client_B, num_B, hidden, r_stacked)
+    lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, r_stacked)
+    b_w_avg = avg_B_w(client_B_w, nun_tasks, num_B)
+
+    print(f"[DEBUG] aggregate_mtl_weights: a_stacked[0]:{a_stacked[0]}")
+
+
+    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_avg}
+    print(f"[DEBUG] aggregate_mtl_weights: agg_weights:{agg_weights}")
+
+    return agg_weights
+
+'''
+def flora(client_weights, lora_r, model, heter=False):
+    pattern = re.compile("lora_(A|B|lambdas|B_w)$")
+    for client in client_weights:
+        grouped = defaultdict(dict)
+        for key, value in client.items():
+            match = pattern.match(key)
+            if match:
+                group = match.group(1)
+                grouped[group][key] = value
+
+        # TODO: should return a list of dicts of dicts where for each client the lora parameters are grouped by layer
+
+    zipped_client_layers = []
+    for client in client_weights:
+        zipped_client_layers.append(list(client.items()))
+
+    for client_layer in list(zip(*zipped_client_layers)):
+'''
+        
+        
+
+
 # Apply aggregated weights to global model
 def update_global_model(global_model, avg_weights):
     updated_count = 0
@@ -237,6 +313,7 @@ def main() -> None:
             client_weights.append(client_lora_weights)
         # Aggregate weights
         print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
+        test = aggregate_mtl_weights(client_weights, 768, 8)
         avg_weights = fed_avg(client_weights)
         # Update global model
         print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated weights")
