@@ -28,6 +28,8 @@ import torch
 from src.roberta_glue_mtl_mlora.data import build_dataloaders
 from src.roberta_glue_mtl_mlora.factory import create_model, create_tokenizer
 from src.roberta_glue_mtl_mlora.hf_utils import default_hf_home, get_hf_token
+from src.roberta_glue_mtl_mlora.fed_utils import *
+
 from src.roberta_glue_mtl_mlora.model import (
     cast_trainable_params_to_fp32,
   #  count_trainable_params,
@@ -301,6 +303,7 @@ def main() -> None:
 
     # Train (optimizer/scheduler/scaler + resume logic live in train_loop.train)
     # FL training loop
+    flora_r = args.lora_r
     for round in range(args.num_fl_rounds):
         print(f"[INFO] Starting FL round {round+1}/{args.num_fl_rounds}")
         client_weights = []
@@ -313,10 +316,22 @@ def main() -> None:
             client_weights.append(client_lora_weights)
         # Aggregate weights
         print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
-        test = aggregate_mtl_weights(client_weights, 768, 8)
-        avg_weights = fed_avg(client_weights)
+        #test = aggregate_mtl_weights(client_weights, 768, 8)
+        #avg_weights = fed_avg(client_weights)
+        avg_weights = aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.5, "client_2": 0.5})
         # Update global model
         print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated weights")
+        flora_r *= len(client_weights)
+        model = create_model(
+            model_name=args.model_name,
+            offline=args.offline,
+            device=device,
+            lora_r=flora_r,
+            lora_alpha=args.lora_alpha,
+            lora_dropout=args.lora_dropout,
+            num_B=args.num_B,
+            temperature=args.temperature,
+        )
         update_global_model(model, avg_weights)
         print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
 
