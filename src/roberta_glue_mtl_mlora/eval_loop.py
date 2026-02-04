@@ -238,7 +238,26 @@ def evaluate(
 
             # Compute split metrics
             if task == "cola":
-                mcc = matthews_corrcoef_from_counts(tp, tn, fp, fn)
+                # Totals for sanity checks
+                pred_pos = tp + fp
+                pred_neg = tn + fn
+                true_pos = tp + fn
+                true_neg = tn + fp
+
+                denom_zero = (pred_pos * true_pos * true_neg * pred_neg) == 0
+
+                if denom_zero:
+                    # If both gold and predicted labels contain both classes, denominator should NOT be zero
+                    if pred_pos > 0 and pred_neg > 0 and true_pos > 0 and true_neg > 0:
+                        raise AssertionError(
+                            f"CoLA MCC denominator==0 but both classes present (tp={tp}, tn={tn}, fp={fp}, fn={fn})."
+                        )
+                    # Expected degenerate case (e.g., all predictions same or all gold same): warn and set NaN
+                    print(f"[WARN] {task}:{split_name} MCC denominator zero (tp={tp}, tn={tn}, fp={fp}, fn={fn}). Setting MCC=NaN.")
+                    mcc = float("nan")
+                else:
+                    mcc = matthews_corrcoef_from_counts(tp, tn, fp, fn)
+
                 task_results[f"{split_name}_mcc"] = float(mcc)
             elif task == "stsb":
                 r = pearson_from_sums(n, sum_x, sum_y, sum_x2, sum_y2, sum_xy)

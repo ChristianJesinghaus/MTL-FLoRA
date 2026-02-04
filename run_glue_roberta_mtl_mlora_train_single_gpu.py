@@ -203,36 +203,13 @@ def aggregate_mtl_weights(client_weights, hidden=768, num_B=3, num_tasks=2, lora
 
     return agg_weights
 
-'''
-def flora(client_weights, lora_r, model, heter=False):
-    pattern = re.compile("lora_(A|B|lambdas|B_w)$")
-    for client in client_weights:
-        grouped = defaultdict(dict)
-        for key, value in client.items():
-            match = pattern.match(key)
-            if match:
-                group = match.group(1)
-                grouped[group][key] = value
-
-        # TODO: should return a list of dicts of dicts where for each client the lora parameters are grouped by layer
-
-    zipped_client_layers = []
-    for client in client_weights:
-        zipped_client_layers.append(list(client.items()))
-
-    for client_layer in list(zip(*zipped_client_layers)):
-'''
-        
-        
-
-
 # Apply aggregated weights to global model
 def update_global_model(global_model, avg_weights):
     updated_count = 0
+        
     with torch.no_grad():
         for name, param in global_model.named_parameters():
             if name in avg_weights:
-                print(f"[DEBUG] update_global_model: Updating {name}, shape={param.shape}")
                 param.copy_(avg_weights[name])
                 updated_count += 1
     print(f"[DEBUG] update_global_model: Updated {updated_count} parameters in global model")
