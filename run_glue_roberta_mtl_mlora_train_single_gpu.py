@@ -159,7 +159,7 @@ def stack_A(client_A, client_p, hidden, lora_r): # TODO Assertion fails: Check A
     stacked = dict()
     for layer in client_A[0]:
         stacked[layer] = torch.cat([client_p[i]*client_A[i][layer] for i in range(num_clients)], dim=1).to(device) # stack As along lora_r for each layer
-    assert next(iter(stacked.values())).shape==torch.Size([1, lora_r, hidden]), "As stacked incorrectly" # fails
+    assert next(iter(stacked.values())).shape==torch.Size([1, lora_r, hidden]), f"As stacked incorrectly: {next(iter(stacked.values())).shape}" # fails
     return stacked
 
 def stack_B(client_B, num_B, hidden, lora_r):
@@ -214,10 +214,9 @@ def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tas
     
     print(f"[DEBUG] aggregate_mtl_weights: client_A[0]:{client_A[0]}")
 
-    r_stacked = lora_r * len(client_weights)
-    a_stacked = stack_A(client_A, client_p, hidden, r_stacked)
-    b_stacked = stack_B(client_B, num_B, hidden, r_stacked)
-    lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, r_stacked)
+    a_stacked = stack_A(client_A, client_p, hidden, lora_r)
+    b_stacked = stack_B(client_B, num_B, hidden, lora_r)
+    lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
     b_w_avg = avg_B_w(client_B_w, nun_tasks, num_B)
 
     print(f"[DEBUG] aggregate_mtl_weights: a_stacked[0]:{a_stacked[0]}")
@@ -320,8 +319,9 @@ def main() -> None:
 
     # Train (optimizer/scheduler/scaler + resume logic live in train_loop.train)
     # FL training loop
-    flora_r = args.lora_r * args.num_clients
+    flora_r = args.lora_r
     for round in range(args.num_fl_rounds):
+        flora_r *= args.num_clients
         print(f"[INFO] Starting FL round {round+1}/{args.num_fl_rounds}")
         client_weights = []
         for client_id in range(args.num_clients):
@@ -339,7 +339,6 @@ def main() -> None:
         #avg_weights = aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.5, "client_2": 0.5})
         # Update global model
         print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated weights")
-        flora_r *= len(client_weights)
         model = create_model(
             model_name=args.model_name,
             offline=args.offline,
@@ -351,8 +350,8 @@ def main() -> None:
             temperature=args.temperature,
         )
         update_global_model(model, avg_weights)
-        if check_bad_tensors(avg_weights):
-            print("[DEBUG] Bad tensor found in avg_weights")
+
+        assert check_bad_tensors(avg_weights) == False, "[DEBUG] Bad tensor found in avg_weights"
         print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
 
     # Save run config
