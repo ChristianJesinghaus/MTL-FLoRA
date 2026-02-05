@@ -152,14 +152,14 @@ def fed_avg(client_weights):
         print(f"  {name}: shape={tensor.shape}, dtype={tensor.dtype}")
     return avg_weights
 
-def stack_A(client_A, client_p, hidden, lora_r, client_p):
+def stack_A(client_A, client_p, hidden, lora_r): # TODO Assertion fails: Check A shape
     device = next(iter(client_A[0].values())).device
     num_clients = len(client_A)
     #stacked = dict.fromkeys(client_A[0], torch.zeros([1, lora_r, hidden]))
     stacked = dict()
     for layer in client_A[0]:
-        stacked[layer] = torch.cat(client_p[i]*[client_A[i][layer] for i in range(num_clients)], dim=1).to(device) # stack As along lora_r for each layer
-    assert next(iter(client_A[0].values())).shape==[1, lora_r, hidden], "As stacked incorrectly"
+        stacked[layer] = torch.cat([client_p[i]*client_A[i][layer] for i in range(num_clients)], dim=1).to(device) # stack As along lora_r for each layer
+    assert next(iter(stacked.values())).shape==torch.Size([1, lora_r, hidden]), "As stacked incorrectly" # fails
     return stacked
 
 def stack_B(client_B, num_B, hidden, lora_r):
@@ -169,7 +169,7 @@ def stack_B(client_B, num_B, hidden, lora_r):
     for layer in client_B[0]:
         stacked[layer] = torch.cat([client_B[i][layer] for i in range(num_clients)], dim=2).to(device) # stack Bs along lora_r for each layer
     # TODO testing
-    assert next(iter(client_B[0].values())).shape==[num_B, hidden, lora_r], "Bs stacked incorrectly"
+    assert next(iter(stacked.values())).shape==torch.Size([num_B, hidden, lora_r]), "Bs stacked incorrectly"
     return stacked
 
 
@@ -193,7 +193,7 @@ def avg_B_w(client_B_w, num_tasks, num_B):
     avg = copy.deepcopy(client_B_w[0])
 
     for layer in client_B_w[0]:
-        for i in range(1, num_clients)
+        for i in range(1, num_clients):
             avg[layer] += client_B_w[i][layer]
         avg[layer] = avg[layer] / num_clients
 
@@ -215,7 +215,7 @@ def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tas
     print(f"[DEBUG] aggregate_mtl_weights: client_A[0]:{client_A[0]}")
 
     r_stacked = lora_r * len(client_weights)
-    a_stacked = stack_A(client_A, client_p hidden, r_stacked)
+    a_stacked = stack_A(client_A, client_p, hidden, r_stacked)
     b_stacked = stack_B(client_B, num_B, hidden, r_stacked)
     lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, r_stacked)
     b_w_avg = avg_B_w(client_B_w, nun_tasks, num_B)
@@ -238,6 +238,21 @@ def update_global_model(global_model, avg_weights):
                 param.copy_(avg_weights[name])
                 updated_count += 1
     print(f"[DEBUG] update_global_model: Updated {updated_count} parameters in global model")
+
+def check_bad_tensors(avg_weights):
+    """
+    Returns True if any tensor contains NaNs OR is all zeros.
+    Otherwise returns False.
+    """
+    for name, t in avg_weights.items():
+        if torch.isnan(t).any():
+            print(f"[DEBUG] check_bad_tensors: NaNs found in {name}")
+            return True
+        if torch.count_nonzero(t) == 0:
+            print(f"[DEBUG] check_bad_tensors: All zeros in {name}")
+            return True
+    return False
+
 
 def main() -> None:
     args = parse_args()
@@ -305,7 +320,7 @@ def main() -> None:
 
     # Train (optimizer/scheduler/scaler + resume logic live in train_loop.train)
     # FL training loop
-    flora_r = args.lora_r
+    flora_r = args.lora_r * args.num_clients
     for round in range(args.num_fl_rounds):
         print(f"[INFO] Starting FL round {round+1}/{args.num_fl_rounds}")
         client_weights = []
@@ -320,7 +335,8 @@ def main() -> None:
         print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
         #test = aggregate_mtl_weights(client_weights, 768, 8)
         #avg_weights = fed_avg(client_weights)
-        avg_weights = aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.5, "client_2": 0.5})
+        avg_weights = aggregate_mtl_weights(client_weights, client_p=[0.5, 0.5], lora_r=flora_r)
+        #avg_weights = aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.5, "client_2": 0.5})
         # Update global model
         print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated weights")
         flora_r *= len(client_weights)
@@ -335,6 +351,8 @@ def main() -> None:
             temperature=args.temperature,
         )
         update_global_model(model, avg_weights)
+        if check_bad_tensors(avg_weights):
+            print("[DEBUG] Bad tensor found in avg_weights")
         print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
 
     # Save run config
