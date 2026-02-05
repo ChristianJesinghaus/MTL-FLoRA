@@ -152,30 +152,55 @@ def fed_avg(client_weights):
         print(f"  {name}: shape={tensor.shape}, dtype={tensor.dtype}")
     return avg_weights
 
-def stack_A(client_A, hidden, lora_r):
-    stacked = dict.fromkeys(client_A[0], torch.zeros([1, lora_r, hidden]))
-    # TODO implement stacking
+def stack_A(client_A, client_p, hidden, lora_r, client_p):
+    device = next(iter(client_A[0].values())).device
+    num_clients = len(client_A)
+    #stacked = dict.fromkeys(client_A[0], torch.zeros([1, lora_r, hidden]))
+    stacked = dict()
+    for layer in client_A[0]:
+        stacked[layer] = torch.cat(client_p[i]*[client_A[i][layer] for i in range(num_clients)], dim=1).to(device) # stack As along lora_r for each layer
+    assert next(iter(client_A[0].values())).shape==[1, lora_r, hidden], "As stacked incorrectly"
     return stacked
 
 def stack_B(client_B, num_B, hidden, lora_r):
-    stacked = dict.fromkeys(client_B[0], torch.zeros([num_B, hidden, lora_r]))
-    # TODO implement stacking
+    device = next(iter(client_B[0].values())).device
+    num_clients = len(client_B)
+    stacked = dict() #dict.fromkeys(client_B[0], torch.zeros([num_B, hidden, lora_r]))
+    for layer in client_B[0]:
+        stacked[layer] = torch.cat([client_B[i][layer] for i in range(num_clients)], dim=2).to(device) # stack Bs along lora_r for each layer
+    # TODO testing
+    assert next(iter(client_B[0].values())).shape==[num_B, hidden, lora_r], "Bs stacked incorrectly"
     return stacked
 
 
 def stack_lambdas(client_lambdas, num_tasks, lora_r):
-    stacked = dict.fromkeys(client_lambdas[0], torch.zeros([num_tasks, lora_r, lora_r]))
-    # TODO implement stacking
+    device = next(iter(client_lambdas[0].values())).device
+    dtype = next(iter(client_lambdas[0].values())).dtype
+    num_clients = len(client_lambdas)
+    stacked = dict.fromkeys(client_lambdas[0], torch.zeros([num_tasks, lora_r, lora_r], dtype=dtype))
+
+    for layer in client_lambdas[0]:
+        lambdas = [client_lambdas[i][layer] for i in range(num_clients)]
+        sizes = [l.shape[1] for l in lambdas] # accounting for heterogeneous lora ranks
+        offset = 0
+        for l, r in zip(lambdas, sizes): # stack lambdas diagonally
+            stacked[layer][:, offset:offset+r, offset:offset+r] = l
+            offset += r
+
     return stacked
 
 def avg_B_w(client_B_w, num_tasks, num_B):
-    avg = dict.fromkeys(client_B_w[0], torch.zeros([num_tasks, num_B]))
-    # TODO implement FedIT
+    avg = copy.deepcopy(client_B_w[0])
+
+    for layer in client_B_w[0]:
+        for i in range(1, num_clients)
+            avg[layer] += client_B_w[i][layer]
+        avg[layer] = avg[layer] / num_clients
+
     return avg
 
-def aggregate_mtl_weights(client_weights, hidden=768, num_B=3, num_tasks=2, lora_r=8):
-    # TODO debug
-    # TODO add device and dtype handling for LoRA tensors
+def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tasks=2, lora_r=8):
+    # TODO integrate & test
     client_A = []
     client_B = []
     client_lambdas = []
@@ -190,7 +215,7 @@ def aggregate_mtl_weights(client_weights, hidden=768, num_B=3, num_tasks=2, lora
     print(f"[DEBUG] aggregate_mtl_weights: client_A[0]:{client_A[0]}")
 
     r_stacked = lora_r * len(client_weights)
-    a_stacked = stack_A(client_A, hidden, r_stacked)
+    a_stacked = stack_A(client_A, client_p hidden, r_stacked)
     b_stacked = stack_B(client_B, num_B, hidden, r_stacked)
     lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, r_stacked)
     b_w_avg = avg_B_w(client_B_w, nun_tasks, num_B)
