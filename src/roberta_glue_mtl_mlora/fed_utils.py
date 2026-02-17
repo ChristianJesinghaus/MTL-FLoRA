@@ -109,13 +109,7 @@ def aggregate_lambdas(result, layer, layer_param):
 
 def aggregate_B_w_matrix(result, layer, layer_param, weights_dict):
     """
-    Aggregates B_w matrices across clients by averaging (optionally weighted by dataset size).
-
-    Args:
-        result: dict containing per-client B_w matrices
-        layer: str, layer name in the dict
-        layer_param: str, the specific parameter name under the lora param
-        weights_dict: dict mapping client_id -> weight (p_k). If None, do simple average
+    Draft like stacking 
     """
     lora_param = "lora_B_w"
     inner = result[layer][lora_param].get(layer_param, {})
@@ -124,37 +118,29 @@ def aggregate_B_w_matrix(result, layer, layer_param, weights_dict):
         result[layer][lora_param][layer_param]["aggregated"] = torch.tensor([], device='cpu')
         return result
 
-    num_tasks = len(inner[clients[0]])  # assume same number of tasks
-
-    # Initialize list for aggregated B_w
+    num_tasks = len(inner[clients[0]])
     aggregated_B_w = []
 
     for t in range(num_tasks):
-        # Collect B_w for task t from all clients
         task_B_w_list = []
         for client in clients:
             B_w_t = inner[client][t]
+            # optional: with client-weighted factor multiply
             if weights_dict is not None:
-                # scale by client weight p_k as tensor on same device/dtype
                 p_k = weights_dict.get(client, None)
                 if p_k is None:
                     raise KeyError(f"Weight for {client} not found in weights_dict")
                 p_k_t = torch.tensor(p_k, device=B_w_t.device, dtype=B_w_t.dtype)
                 B_w_t = B_w_t * p_k_t
             task_B_w_list.append(B_w_t)
-
-        # Sum (or average)
-        task_B_w_global = torch.stack(task_B_w_list, dim=0).sum(dim=0)
-        if weights_dict is None:
-            task_B_w_global = task_B_w_global / len(clients)  # simple average
+        # Concatenate all clients along the last dimension
+        task_B_w_global = torch.cat(task_B_w_list, dim=-1)
         aggregated_B_w.append(task_B_w_global)
 
-    # Stack tasks into a tensor
     aggregated_B_w = torch.stack(aggregated_B_w, dim=0)
     result[layer][lora_param][layer_param]["aggregated"] = aggregated_B_w
-
-    #print(f"Aggregated B_w shape: {aggregated_B_w.shape}")
     return result
+
 
 
 def print_shapes_per_parameter(client_weights):

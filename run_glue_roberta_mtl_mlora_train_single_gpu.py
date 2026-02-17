@@ -198,6 +198,34 @@ def stack_lambdas(client_lambdas, num_tasks, lora_r):
 
     return stacked
 
+def stack_B_w(client_B_w):
+    """
+    Horizontales Stapeln der lora_B_w-Gewichte aller Clients.
+    Die Gewichtungsvektoren jeder Ebene werden entlang der B-Dimension
+    (zweite Achse) aneinandergehängt.
+
+    Args:
+        client_B_w (List[Dict[str, Tensor]]): Liste der lora_B_w-Parameter
+            pro Client (pro Layer).
+
+    Returns:
+        Dict[str, Tensor]: Aggregierte lora_B_w-Parameter mit
+            erweiterter Breite.
+    """
+    num_clients = len(client_B_w)
+    device = next(iter(client_B_w[0].values())).device
+    stacked = {}
+    for layer in client_B_w[0]:
+        # dim=1 ist die B-Dimension (zweite Achse)
+        stacked[layer] = torch.cat(
+            [client_B_w[i][layer] for i in range(num_clients)],
+            dim=1
+        ).to(device)
+    return stacked
+
+
+
+
 def avg_B_w(client_B_w, num_tasks, num_B):
     num_clients = len(client_B_w)
     avg = copy.deepcopy(client_B_w[0])
@@ -242,9 +270,16 @@ def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tas
     a_stacked = stack_A(client_A, client_p, hidden, lora_r)
     b_stacked = stack_B(client_B, num_B, hidden, lora_r)
     lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
-    b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
+    # alt: b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
+    b_w_stacked = stack_B_w(client_B_w)
 
-    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_avg}
+    agg_weights = {
+        **a_stacked,
+        **b_stacked,
+        **lambdas_stacked,
+        **b_w_stacked
+    }
+
     print(f"[DEBUG] aggregate_mtl_weights: Created {len(agg_weights)} aggregated weights")
     
     return agg_weights
@@ -459,7 +494,8 @@ def main() -> None:
 
     # Train (optimizer/scheduler/scaler + resume logic live in train_loop.train)
     # FL training loop
-    flora_r = args.lora_r  # Track current global model's LoRA rank
+        # Federated Learning Schleife
+    flora_r = args.lora_r
     for round in range(args.num_fl_rounds):
         print(f"[INFO] Starting FL round {round+1}/{args.num_fl_rounds}")
         client_weights = []
@@ -467,83 +503,92 @@ def main() -> None:
             print(f"[INFO] Fine-tuning client {client_id+1}/{args.num_clients}")
             client_model = copy.deepcopy(global_model)
             client_data = task_data[client_id]
-            client_lora_weights = fine_tune_client(client_model, client_data, device, args, use_amp)
-            print(f"[DEBUG] FL round {round+1}: Client {client_id+1} returned {len(client_lora_weights)} LoRA matrices")
-            for name, tensor in list(client_lora_weights.items())[:2]:
-                print(f"  {name}: shape={tensor.shape}, min={tensor.min():.6f}, max={tensor.max():.6f}, mean={tensor.mean():.6f}")
+            client_lora_weights = fine_tune_client(
+                client_model, client_data, device, args, use_amp
+            )
             client_weights.append(client_lora_weights)
-        
-        # Aggregate weights
-        print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
-    
-        #avg_weights = dict()
-        avg_weights = fed_avg(client_weights)
-        '''
-        if args.strat == "fedit":
+
+        # Aggregation: choose strategy based on args.strat
+        strat = args.strat.lower()
+        if strat == "fedit":
+            # Naive FedAvg for comparison – rank remains unchanged
             avg_weights = fed_avg(client_weights)
-        elif args.strat == "centralized":
-            avg_weights = client_weights
-        else: # default to FLoRA
-            flora_r *= args.num_clients
+            new_flora_r = flora_r
+        elif strat == "centralized":
+            # Centralized variant: simply take the weights of the first client
+            avg_weights = copy.deepcopy(client_weights[0])
+            new_flora_r = flora_r
+        else:
+            # FLoRA (Standard) – Stacking of LoRA weights
+            # 1) Determine relative dataset sizes per client
+            # relative Datensatzgrößen pro Client bestimmen
+            client_sizes = []
+            for client_data in task_data:
+                size = 0
+                for _, data_obj in client_data.items():
+                    train_loader = data_obj.train_loader
+                    # use number of batches * batch size as an estimate
+                    bs = getattr(train_loader, "batch_size", 1)
+                    try:
+                        size += len(train_loader) * bs
+                    except TypeError:
+                        # If the DataLoader itself is not sizable, set contribution to 0
+                        size += 0
+                client_sizes.append(size)
+            total_size = sum(client_sizes)
+            if total_size > 0:
+                client_p = [s / total_size for s in client_sizes]
+            else:
+                client_p = [1.0 / len(client_sizes)] * len(client_sizes)
+
+
+
+            # 2) Calculate new global LoRA rank = sum of client ranks
+            client_ranks = []
+            for cw in client_weights:
+                for name, tensor in cw.items():
+                    if name.endswith("lora_A"):
+                        client_ranks.append(tensor.shape[1])
+                        break
+            new_flora_r = sum(client_ranks)
+
+            # 3) Aggregation through stacking
             avg_weights = aggregate_mtl_weights(
-                client_weights, 
-                client_p=[1.0/args.num_clients] * args.num_clients,
-                hidden=768,  # RoBERTa-base hidden size
+                client_weights,
+                client_p=client_p,
+                hidden=768,
                 num_B=args.num_B,
                 num_tasks=len(GLUE_TASKS),
-                lora_r=flora_r 
+                lora_r=new_flora_r
             )
-        '''
-        '''
-        
-        # Debug: Check aggregated weights
-        print(f"[DEBUG] FL round {round+1}: Aggregated weights summary:")
-        agg_lora_a_shapes = []
-        agg_lora_b_shapes = []
-        for name, tensor in avg_weights.items():
-            if name.endswith("lora_A"):
-                agg_lora_a_shapes.append(tensor.shape)
-            elif "lora_B" in name and not name.endswith("lora_B_w"):
-                agg_lora_b_shapes.append(tensor.shape)
-        
-        if agg_lora_a_shapes:
-            print(f"  lora_A shape samples: {agg_lora_a_shapes[:2]}, expected: (1, {flora_r}, 768)")
-        if agg_lora_b_shapes:
-            print(f"  lora_B shape samples: {agg_lora_b_shapes[:2]}, expected: (3, 768, {flora_r}) or similar")
-        '''
-        # Create new global model with potentially expanded rank
+            # update global rank for next round
+            flora_r = new_flora_r
+
+        # Create new global model with the (possibly increased) rank
         new_global_model = create_model(
             model_name=args.model_name,
             offline=args.offline,
             device=device,
-            lora_r=flora_r,
+            lora_r=new_flora_r,
             lora_alpha=args.lora_alpha,
             lora_dropout=args.lora_dropout,
             num_B=args.num_B,
             temperature=args.temperature,
         )
-        
-        # Transfer non-LoRA parameters from old model to preserve training state
+
+        # Transfer non-LoRA parameters
         transfer_non_lora_params(global_model, new_global_model, round_num=round+1)
-        
-        # Update global model with aggregated LoRA weights
-        print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated LoRA weights")
+
+        # Copy aggregated LoRA weights into the new model
         update_global_model(new_global_model, avg_weights)
-        
-        # Ensure trainable params are set correctly for the new model
+
+        # Set training settings and data types
         set_trainable_params(new_global_model, train_bias=train_bias, train_layernorm=train_ln)
         cast_trainable_params_to_fp32(new_global_model)
-        
-        # Debug: Verify updated weights
-        print(f"[DEBUG] FL round {round+1}: Updated model weights stats:")
-        for name, param in list(new_global_model.named_parameters()):
-            if 'lora' in name and 'lora_A' in name:
-                print(f"  {name}: shape={param.shape}, min={param.min():.6f}, max={param.max():.6f}, mean={param.mean():.6f}")
-                break
-        
-        # Replace global model reference and update current rank
+
         global_model = new_global_model
         print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
+
     
     # Save run config
     with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:

@@ -47,7 +47,7 @@ ARGS=(
   --eval_details_max_examples 200
 
   # Federated learning settings
-  --num_fl_rounds 1
+  --num_fl_rounds 2
   --num_clients 2
   --dirichlet_alpha 1.0
 
