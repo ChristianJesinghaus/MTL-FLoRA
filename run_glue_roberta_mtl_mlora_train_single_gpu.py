@@ -270,15 +270,18 @@ def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tas
     a_stacked = stack_A(client_A, client_p, hidden, lora_r)
     b_stacked = stack_B(client_B, num_B, hidden, lora_r)
     lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
-    # alt: b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
-    b_w_stacked = stack_B_w(client_B_w)
+
+    # Statt stapeln -> über alle Clients mitteln, damit die Form (num_tasks, num_B) erhalten bleibt
+    b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
 
     agg_weights = {
         **a_stacked,
         **b_stacked,
         **lambdas_stacked,
-        **b_w_stacked
+        **b_w_avg
     }
+
+
 
     print(f"[DEBUG] aggregate_mtl_weights: Created {len(agg_weights)} aggregated weights")
     
