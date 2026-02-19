@@ -142,16 +142,6 @@ def train(
 
                 global_update += 1
 
-                lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else learning_rate
-                elapsed_min = (time.time() - start_time) / 60.0
-                pbar.set_postfix(
-                    upd=f"{global_update}/{total_updates}",
-                    task=task,
-                    lr=f"{lr:.2e}",
-                    loss=f"{loss.item()*max(1,grad_accum_steps):.4f}",
-                    min=f"{elapsed_min:.1f}",
-                )
-
                 if save_steps > 0 and (global_update % save_steps == 0):
                     ckpt_path = os.path.join(output_dir, "checkpoints", f"ckpt_train_step{global_update}.pt")
                     save_checkpoint(
@@ -168,6 +158,11 @@ def train(
                         os.path.join(output_dir, "checkpoints"),
                         keep_last=save_total_limit,
                     )
+
+        # Log epoch summary
+        lr = scheduler.get_last_lr()[0] if hasattr(scheduler, "get_last_lr") else learning_rate
+        elapsed_min = (time.time() - start_time) / 60.0
+        print(f"[train] epoch={epoch+1}/{epochs}, step={global_update}/{total_updates}, lr={lr:.2e}, elapsed={elapsed_min:.1f}min")
 
         # Save pre-eval checkpoint
         if save_pre_eval_ckpt:

@@ -121,8 +121,9 @@ def save_adapter_and_heads(output_dir: str, model: torch.nn.Module) -> None:
 
 def resolve_load_paths(load_dir: str) -> Tuple[Optional[str], Optional[str]]:
     d = Path(load_dir)
-    cand_adapter = [d / "adapter_state_last.pt", d / "adapter_state.pt"]
-    cand_heads = [d / "heads_state_last.pt", d / "heads_state.pt"]
+    # Prioritize final versions from FL training, then fall back to regular versions
+    cand_adapter = [d / "adapter_state_final.pt", d / "adapter_state_last.pt", d / "adapter_state.pt"]
+    cand_heads = [d / "heads_state_final.pt", d / "heads_state_last.pt", d / "heads_state.pt"]
 
     ap = next((str(p) for p in cand_adapter if p.exists()), None)
     hp = next((str(p) for p in cand_heads if p.exists()), None)

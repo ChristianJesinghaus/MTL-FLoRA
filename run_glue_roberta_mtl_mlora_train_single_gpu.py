@@ -433,7 +433,7 @@ def main() -> None:
     train_bias = not args.freeze_bias
     train_ln = not args.freeze_layernorm
     set_trainable_params(global_model, train_bias=train_bias, train_layernorm=train_ln)
-    cast_trainable_params_to_fp32(global_model)
+    #cast_trainable_params_to_fp32(global_model)
 
    # trainable, total, pct = count_trainable_params(model)
    # print(f"[INFO] Trainable params: {trainable:,} / {total:,} ({pct:.4f}%)")
@@ -476,9 +476,9 @@ def main() -> None:
         # Aggregate weights
         print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
     
-        #avg_weights = dict()
-        avg_weights = fed_avg(client_weights)
-        '''
+        avg_weights = dict()
+        #avg_weights = fed_avg(client_weights)
+        #avg_weights = client_weights[0]
         if args.strat == "fedit":
             avg_weights = fed_avg(client_weights)
         elif args.strat == "centralized":
@@ -494,8 +494,6 @@ def main() -> None:
                 lora_r=flora_r 
             )
         '''
-        '''
-        
         # Debug: Check aggregated weights
         print(f"[DEBUG] FL round {round+1}: Aggregated weights summary:")
         agg_lora_a_shapes = []
@@ -544,6 +542,20 @@ def main() -> None:
         # Replace global model reference and update current rank
         global_model = new_global_model
         print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
+    
+    # Save global model after FL training
+    print(f"[INFO] Saving global model after FL training")
+    torch.save(global_model.state_dict(), os.path.join(args.output_dir, "global_model_final.pt"))
+    
+    # Save LoRA adapter weights separately
+    adapter_state = {name: param.detach().cpu() for name, param in global_model.named_parameters() if 'lora' in name}
+    torch.save(adapter_state, os.path.join(args.output_dir, "adapter_state_final.pt"))
+    
+    # Save task heads weights separately
+    heads_state = {name: param.detach().cpu() for name, param in global_model.named_parameters() if 'heads' in name}
+    torch.save(heads_state, os.path.join(args.output_dir, "heads_state_final.pt"))
+    
+    print(f"[INFO] Saved global model, adapter weights, and task heads to {args.output_dir}")
     
     # Save run config
     with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:

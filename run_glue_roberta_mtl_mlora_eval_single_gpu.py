@@ -41,6 +41,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--load_adapter", type=str, default=None)
     p.add_argument("--load_heads", type=str, default=None)
     p.add_argument("--load_ckpt", type=str, default=None)
+    p.add_argument("--load_global_model", type=str, default=None, help="Path to global_model_final.pt from FL training")
 
     # Data / eval
     p.add_argument("--eval_batch_size", type=int, default=32)
@@ -76,8 +77,8 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    if not (args.load_ckpt or args.load_dir or (args.load_adapter and args.load_heads)):
-        raise ValueError("Provide --load_ckpt OR --load_dir OR (--load_adapter and --load_heads).")
+    if not (args.load_ckpt or args.load_dir or (args.load_adapter and args.load_heads) or args.load_global_model):
+        raise ValueError("Provide --load_ckpt OR --load_dir OR (--load_adapter and --load_heads) OR --load_global_model.")
 
     set_seed(args.seed)
 
@@ -114,7 +115,12 @@ def main() -> None:
     )
 
     # Load weights
-    if args.load_ckpt:
+    if args.load_global_model:
+        print(f"[LOAD] Loading full global model from: {args.load_global_model}")
+        global_state_dict = torch.load(args.load_global_model, map_location="cpu")
+        model.load_state_dict(global_state_dict, strict=False)
+        print(f"[LOAD] Successfully loaded global model")
+    elif args.load_ckpt:
         print(f"[CKPT] Loading from full checkpoint: {args.load_ckpt}")
         load_from_checkpoint(args.load_ckpt, model=model, optimizer=None, scheduler=None, scaler=None, strict_heads=True)
     else:
@@ -128,7 +134,21 @@ def main() -> None:
 
         print(f"[LOAD] adapter={adapter_path}")
         print(f"[LOAD] heads={heads_path}")
-        load_adapter_and_heads(model, adapter_path=adapter_path, heads_path=heads_path, strict_heads=True)
+        
+        # Load adapter
+        from src.roberta_glue_mtl_mlora.model import load_trainable_encoder_state
+        adapter_state = torch.load(adapter_path, map_location="cpu")
+        load_trainable_encoder_state(model, adapter_state)
+        
+        # Load heads, stripping "heads." prefix if present
+        heads_state = torch.load(heads_path, map_location="cpu")
+        corrected_heads_state = {}
+        for k, v in heads_state.items():
+            if k.startswith("heads."):
+                corrected_heads_state[k.replace("heads.", "", 1)] = v
+            else:
+                corrected_heads_state[k] = v
+        model.heads.load_state_dict(corrected_heads_state, strict=True)  # type: ignore[attr-defined]
 
     # Disable grads
     for p in model.parameters():
@@ -147,7 +167,7 @@ def main() -> None:
         hf_token=hf_token,
         offline=args.offline,
         save_eval_details=args.save_eval_details,
-    )
+    )[0]
 
     results = evaluate(
         model=model,
