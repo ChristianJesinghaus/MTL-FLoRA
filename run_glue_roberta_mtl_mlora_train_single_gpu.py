@@ -171,15 +171,37 @@ def stack_A(client_A, client_p, hidden, lora_r):
     assert next(iter(stacked.values())).shape==torch.Size([1, lora_r, hidden]), f"As stacked incorrectly: {next(iter(stacked.values())).shape}"
     return stacked
 
-def stack_B(client_B, num_B, hidden, lora_r):
-    device = next(iter(client_B[0].values())).device
+def stack_B(client_B, num_B_global, hidden, lora_r):
+    """
+    Aggregiert die lora_B-Matrizen aller Clients entlang der B-Dimension.
+
+    Args:
+        client_B (List[Dict[str, Tensor]]): Liste der lora_B-Parameter pro Client.
+        num_B_global (int): Summe der B-Adapter über alle Clients (num_clients * num_B).
+        hidden (int): Größe der Ausgangsfeature (z. B. 768 bei RoBERTa).
+        lora_r (int): Gesamter LoRA-Rang = Summe der Client-Ränge.
+
+    Returns:
+        Dict[str, Tensor]: Aggregierte lora_B-Parameter der Form (num_B_global, hidden, lora_r).
+    """
     num_clients = len(client_B)
-    stacked = dict() #dict.fromkeys(client_B[0], torch.zeros([num_B, hidden, lora_r]))
+    stacked = {}
+
     for layer in client_B[0]:
-        stacked[layer] = torch.cat([client_B[i][layer] for i in range(num_clients)], dim=2).to(device) # stack Bs along lora_r for each layer
-    # TODO testing
-    assert next(iter(stacked.values())).shape==torch.Size([num_B, hidden, lora_r]), "Bs stacked incorrectly"
+        # Ermittle für jeden Client die Ranggröße (dritte Dimension)
+        sizes = [client_B[i][layer].shape[2] for i in range(num_clients)]
+        aggregated = torch.zeros(num_B_global, hidden, lora_r, device=client_B[0][layer].device)
+        b_idx = 0
+        r_offset = 0
+        for i, size in enumerate(sizes):
+            for b in range(client_B[i][layer].shape[0]):  # iteriere über num_B pro Client
+                aggregated[b_idx, :, r_offset : r_offset + size] = client_B[i][layer][b]
+                b_idx += 1
+            r_offset += size
+        stacked[layer] = aggregated
+
     return stacked
+
 
 
 def stack_lambdas(client_lambdas, num_tasks, lora_r):
@@ -198,6 +220,27 @@ def stack_lambdas(client_lambdas, num_tasks, lora_r):
 
     return stacked
 
+def stack_B_w(client_B_w):
+    """
+    Horizontales Stapeln der lora_B_w-Gewichtungsvektoren aller Clients.
+    Die Gewichtungsvektoren jeder Ebene werden entlang der B-Dimension
+    (dim=1) aneinandergereiht.
+
+    Args:
+        client_B_w (List[Dict[str, Tensor]]): Liste der lora_B_w-Parameter pro Client.
+
+    Returns:
+        Dict[str, Tensor]: Aggregierte lora_B_w-Parameter mit erweiterter Breite.
+    """
+    num_clients = len(client_B_w)
+    stacked = {}
+    for layer in client_B_w[0]:
+        # jedes Gewicht hat Form (num_tasks, num_B); concat über B-Dimension
+        stacked[layer] = torch.cat([client_B_w[i][layer] for i in range(num_clients)], dim=1)
+    return stacked
+
+
+
 def avg_B_w(client_B_w, num_tasks, num_B):
     num_clients = len(client_B_w)
     avg = copy.deepcopy(client_B_w[0])
@@ -214,40 +257,25 @@ def avg_B_w(client_B_w, num_tasks, num_B):
     return avg
 
 def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tasks=2, lora_r=8):
-    client_A = []
-    client_B = []
-    client_lambdas = []
-    client_B_w = []
+    client_A, client_B, client_lambdas, client_B_w = [], [], [], []
 
     for weights in client_weights:
         client_A.append({k: v for k, v in weights.items() if k.endswith("lora_A")})
         client_B.append({k: v for k, v in weights.items() if "lora_B" in k and not k.endswith("lora_B_w")})
         client_lambdas.append({k: v for k, v in weights.items() if k.endswith("lora_lambdas")})
         client_B_w.append({k: v for k, v in weights.items() if k.endswith("lora_B_w")})
-    
-    print(f"[DEBUG] aggregate_mtl_weights: Found {len(client_A[0])} lora_A, {len(client_B[0])} lora_B, {len(client_lambdas[0])} lora_lambdas, {len(client_B_w[0])} lora_B_w in first client")
-    
-    '''
-    # Sample parameter names for debugging
-    if client_A[0]:
-        print(f"[DEBUG] Sample lora_A names: {list(client_A[0].keys())[:2]}")
-    if client_B[0]:
-        print(f"[DEBUG] Sample lora_B names: {list(client_B[0].keys())[:2]}")
-    if client_lambdas[0]:
-        print(f"[DEBUG] Sample lora_lambdas names: {list(client_lambdas[0].keys())[:2]}")
-    if client_B_w[0]:
-        print(f"[DEBUG] Sample lora_B_w names: {list(client_B_w[0].keys())[:2]}")
-    '''
 
+    # Summe der LoRA-Ränge bestimmen (Parameter lora_r wird bereits übergeben)
+    # und num_B gibt hier die globale Anzahl der B-Adapter an
     a_stacked = stack_A(client_A, client_p, hidden, lora_r)
     b_stacked = stack_B(client_B, num_B, hidden, lora_r)
     lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
-    b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
+    b_w_stacked = stack_B_w(client_B_w)
 
-    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_avg}
+    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_stacked}
     print(f"[DEBUG] aggregate_mtl_weights: Created {len(agg_weights)} aggregated weights")
-    
     return agg_weights
+
 
 # Apply aggregated weights to global model
 def update_global_model(global_model, avg_weights):
@@ -483,16 +511,48 @@ def main() -> None:
             avg_weights = fed_avg(client_weights)
         elif args.strat == "centralized":
             avg_weights = client_weights
-        else: # default to FLoRA
-            flora_r *= args.num_clients
+        else:  # default to FLoRA
+            # 1) relative Datensatzgrößen pro Client bestimmen
+            client_sizes = []
+            for client_data in task_data:
+                size = 0
+                for _, data_obj in client_data.items():
+                    train_loader = data_obj.train_loader
+                    bs = getattr(train_loader, "batch_size", 1)
+                    try:
+                        size += len(train_loader) * bs
+                    except TypeError:
+                        # falls der DataLoader kein __len__ unterstützt
+                        size += 0
+                client_sizes.append(size)
+            total_size = sum(client_sizes)
+            if total_size > 0:
+                client_p = [s / total_size for s in client_sizes]
+            else:
+                client_p = [1.0 / len(client_sizes)] * len(client_sizes)
+
+            # 2) neuen globalen LoRA-Rang bestimmen (Summe der Client-Ränge)
+            client_ranks = []
+            for cw in client_weights:
+                for name, tensor in cw.items():
+                    if name.endswith("lora_A"):
+                        client_ranks.append(tensor.shape[1])
+                        break
+            new_flora_r = sum(client_ranks)
+
+            # 3) globale Anzahl B-Adapter berechnen und Aggregation durchführen
+            global_num_B = args.num_B * len(client_weights)
             avg_weights = aggregate_mtl_weights(
-                client_weights, 
-                client_p=[1.0/args.num_clients] * args.num_clients,
-                hidden=768,  # RoBERTa-base hidden size
-                num_B=args.num_B,
+                client_weights,
+                client_p=client_p,
+                hidden=768,
+                num_B=global_num_B,
                 num_tasks=len(GLUE_TASKS),
-                lora_r=flora_r 
+                lora_r=new_flora_r
             )
+
+            flora_r = new_flora_r
+
         '''
         # Debug: Check aggregated weights
         print(f"[DEBUG] FL round {round+1}: Aggregated weights summary:")
@@ -511,15 +571,16 @@ def main() -> None:
         '''
         # Create new global model with potentially expanded rank
         new_global_model = create_model(
-            model_name=args.model_name,
-            offline=args.offline,
-            device=device,
-            lora_r=flora_r,
-            lora_alpha=args.lora_alpha,
-            lora_dropout=args.lora_dropout,
-            num_B=args.num_B,
-            temperature=args.temperature,
-        )
+        model_name=args.model_name,
+        offline=args.offline,
+        device=device,
+        lora_r=flora_r,
+        lora_alpha=args.lora_alpha,
+        lora_dropout=args.lora_dropout,
+        num_B=global_num_B,   # <-- wichtige Anpassung
+        temperature=args.temperature,
+    )
+
         
         # Transfer non-LoRA parameters from old model to preserve training state
         transfer_non_lora_params(global_model, new_global_model, round_num=round+1)
