@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=roberta_glue_mlora_eval_1gpu
-#SBATCH --partition=pascal
+#SBATCH --partition=ampere,volta,pascal
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1
-#SBATCH --mem=24G
-#SBATCH --time=04:00:00
+#SBATCH --exclude=pascal-node01.l3s.intra,pascal-node03.l3s.intra
+#SBATCH --mem=32G
+#SBATCH --time=3:00:00
 #SBATCH --output=logs/%x.%j.out
 #SBATCH --error=logs/%x.%j.err
 #SBATCH --mail-type=END,FAIL

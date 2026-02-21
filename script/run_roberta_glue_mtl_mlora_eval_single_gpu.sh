@@ -2,57 +2,62 @@
 set -euo pipefail
 
 # Usage:
-#   bash script/run_roberta_glue_mtl_mlora_eval_single_gpu.sh <LOAD_DIR> <OUT_DIR> [extra args...]
+#   bash script/run_roberta_glue_mtl_mlora_eval_single_gpu.sh <MODEL_DIR> [OUTPUT_DIR] [extra args...]
 #
-# Examples:
-#   bash script/run_roberta_glue_mtl_mlora_eval_single_gpu.sh outputs/roberta_run_123 outputs/roberta_eval_456 \
-#        --eval_details_max_examples -1
+# <MODEL_DIR>   = Verzeichnis des Trainingslaufs (enthält global_model_final.pt, adapter_state_final.pt, heads_state_final.pt)
+# [OUTPUT_DIR]  = optionales Ausgabeverzeichnis; Standard: <MODEL_DIR>/eval_only
+# [extra args]  = werden direkt an das Python-Eval-Skript weitergereicht (z. B. --eval_details_max_examples -1)
 
-LOAD_DIR="${1:?Usage: $0 <LOAD_DIR> <OUT_DIR> [extra args...] }"
-OUT_DIR="${2:?Usage: $0 <LOAD_DIR> <OUT_DIR> [extra args...] }"
-shift 2 || true
+# Erstes Argument: Verzeichnis mit dem trainierten Modell
+MODEL_DIR="${1:?Usage: $0 <MODEL_DIR> [OUTPUT_DIR] [extra args...] }"
+shift || true
+
+# Wenn das nächste Argument kein Flag ist (--*), als OUTPUT_DIR interpretieren
+if [[ $# -gt 0 && $1 != --* ]]; then
+  OUTPUT_DIR="$1"
+  shift || true
+else
+  OUTPUT_DIR="${MODEL_DIR}/eval_only"
+fi
+
+# Alle weiteren Argumente sind optionale Flags für das Python-Skript
 EXTRA_ARGS=("$@")
 
-# Load container/env helpers
+# Lade Container-/Umgebungs-Helfer
 source "$(dirname "${BASH_SOURCE[0]}")/common_env.sh"
 
-mkdir -p "${OUT_DIR}"
+# Ausgabeordner anlegen
+mkdir -p "${OUTPUT_DIR}"
 
+# Name des Python-Skripts
 SCRIPT="run_glue_roberta_mtl_mlora_eval_single_gpu.py"
 
-# Base args
+# Standard-Argumente (können via EXTRA_ARGS überschrieben werden)
+# Passe lora_r und weitere mLoRA-Parameter an das Training an (zwei Clients → r=16)
 ARGS=(
-  --output_dir "${OUT_DIR}"
-  --load_dir "${LOAD_DIR}"
-  --eval_batch_size 32
-  --max_length 256
-  --num_workers 2
-
-  # mLoRA MUST match training (override via EXTRA_ARGS if needed)
-  --lora_r 8
+  --output_dir "${OUTPUT_DIR}"
+  --model_name roberta-base
+  --lora_r 16
   --lora_alpha 16
   --lora_dropout 0.05
   --num_B 3
   --temperature 0.1
-
-  # Mixed precision
-  --fp16
-
-  # eval details dump (override via EXTRA_ARGS)
-  --save_eval_details
-  --eval_details_max_examples 200
+  --eval_batch_size 32
+  --max_length 256
+  --load_global_model "${MODEL_DIR}/global_model_final.pt"
 )
 
-# Append extra args from CLI
-ARGS+=("${EXTRA_ARGS[@]}")
-
-CMD=(python3 -u "${SCRIPT}" "${ARGS[@]}")
+# Baue den Python-Befehl zusammen
+CMD=(python3 -u "${SCRIPT}" "${ARGS[@]}" "${EXTRA_ARGS[@]}")
 CMD_STR="$(printf '%q ' "${CMD[@]}")"
 
-echo "[RUN] LOAD_DIR=${LOAD_DIR}"
-echo "[RUN] OUT_DIR=${OUT_DIR}"
-echo "[RUN] HF_HOME=${HF_HOME}"
+# Ausführliche Ausgaben
+echo "[RUN] MODEL_DIR=${MODEL_DIR}"
+echo "[RUN] OUTPUT_DIR=${OUTPUT_DIR}"
+echo "[RUN] REPO_DIR=${REPO_DIR}"
 echo "[RUN] CONTAINER_IMAGE=${CONTAINER_IMAGE}"
+echo "[RUN] OMP_NUM_THREADS=${OMP_NUM_THREADS:-<unset>}"
 echo "[RUN] CMD=${CMD_STR}"
 
+# Starte die Evaluation im Container
 run_in_container "cd '${REPO_DIR}' && ${CMD_STR}"

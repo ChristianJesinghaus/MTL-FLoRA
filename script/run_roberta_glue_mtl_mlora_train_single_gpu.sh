@@ -18,7 +18,7 @@ SCRIPT="run_glue_roberta_mtl_mlora_train_single_gpu.py"
 # Default args (you can override by passing the same flags in EXTRA_ARGS)
 ARGS=(
   --output_dir "${OUT_DIR}"
-  --epochs 1
+  --epochs 2
   --train_batch_size 8
   --eval_batch_size 32
   --grad_accum_steps 2
@@ -44,15 +44,15 @@ ARGS=(
 
   # Eval details dump (optional)
   --save_eval_details
-  --eval_details_max_examples 200
+  #--eval_details_max_examples 200
 
   # Federated learning settings
-  --num_fl_rounds 1
+  --num_fl_rounds 2
   --num_clients 2
-  --dirichlet_alpha 1.0
+  --dirichlet_alpha 30.0
 
   # Test mode (set via EXTRA_ARGS if needed)
-  --test
+   #--test
 )
 
 CMD=(python3 -u "${SCRIPT}" "${ARGS[@]}" "${EXTRA_ARGS[@]}")
