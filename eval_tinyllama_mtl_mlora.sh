@@ -38,7 +38,7 @@ ARGS=(
   --max_length 256
   --num_workers 2
 
-  --lora_r 32
+  --lora_r 16
   --lora_alpha 16
   --lora_dropout 0.05
   --num_B 3

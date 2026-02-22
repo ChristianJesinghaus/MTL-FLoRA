@@ -36,8 +36,8 @@ SCRIPT="run_glue_tinyllama_mtl_mlora_train_single_gpu.py"
 # command line.
 ARGS=(
   --output_dir "${OUT_DIR}"
-  --epochs 2
-  --train_batch_size 8
+  --epochs 1
+  --train_batch_size 16
   --eval_batch_size 16
   --grad_accum_steps 2
   --learning_rate 2e-4
@@ -65,7 +65,7 @@ ARGS=(
   #--eval_details_max_examples 200
 
   # Federated learning settings
-  --num_fl_rounds 2
+  --num_fl_rounds 1
   --num_clients 2
   --dirichlet_alpha 30.0
 

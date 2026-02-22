@@ -28,15 +28,30 @@ def save_checkpoint(
     adapter_state = get_trainable_encoder_state(model)
     heads_state = {k: v.detach().cpu() for k, v in model.heads.state_dict().items()}  # type: ignore[attr-defined]
 
+    # Handle optional optimizer, scheduler and scaler objects gracefully.
+    # When saving the final aggregated model after federated training there may
+    # be no optimizer, scheduler or scaler available (e.g. we pass ``None``).
+    # Calling ``state_dict()`` on a ``None`` value would raise an ``AttributeError``.
+    # We therefore explicitly check for ``None`` before extracting state.  This
+    # ensures that final checkpoints can be saved without an active optimizer,
+    # scheduler or scaler.
+    optimizer_state = optimizer.state_dict() if optimizer is not None else None
+    scheduler_state = (
+        scheduler.state_dict() if (scheduler is not None and hasattr(scheduler, "state_dict")) else None
+    )
+    scaler_state = (
+        scaler.state_dict() if (scaler is not None and hasattr(scaler, "state_dict")) else None
+    )
+
     state = {
         "epoch": int(epoch),
         "update_step": int(update_step),
         "args": vars(args) if hasattr(args, "__dict__") else dict(args),
         "adapter_state": adapter_state,
         "heads_state": heads_state,
-        "optimizer": optimizer.state_dict(),
-        "scheduler": scheduler.state_dict() if hasattr(scheduler, "state_dict") else None,
-        "scaler": scaler.state_dict() if (scaler is not None and hasattr(scaler, "state_dict")) else None,
+        "optimizer": optimizer_state,
+        "scheduler": scheduler_state,
+        "scaler": scaler_state,
         "rng_state": {
             "python": random.getstate(),
             "torch": torch.get_rng_state(),
