@@ -36,10 +36,10 @@ SCRIPT="run_glue_tinyllama_mtl_mlora_train_single_gpu.py"
 # command line.
 ARGS=(
   --output_dir "${OUT_DIR}"
-  --epochs 1
-  --train_batch_size 2
+  --epochs 2
+  --train_batch_size 8
   --eval_batch_size 16
-  --grad_accum_steps 4
+  --grad_accum_steps 2
   --learning_rate 2e-4
   --warmup_ratio 0.06
   --max_length 256
@@ -48,10 +48,10 @@ ARGS=(
   --freeze_layernorm
 
   # mLoRA hyperparameters (small rank and few B matrices)
-  --lora_r 4
+  --lora_r 8
   --lora_alpha 16
   --lora_dropout 0.05
-  --num_B 2
+  --num_B 3
   --temperature 0.1
 
   # Mixed precision
@@ -62,15 +62,15 @@ ARGS=(
 
   # Dump evaluation details after each epoch
   --save_eval_details
-  --eval_details_max_examples 200
+  #--eval_details_max_examples 200
 
   # Federated learning settings
-  --num_fl_rounds 1
-  --num_clients 1
-  --dirichlet_alpha 1.0
+  --num_fl_rounds 2
+  --num_clients 2
+  --dirichlet_alpha 30.0
 
   # Enable test mode by default (override with --no-test in EXTRA_ARGS)
-  --test
+  #--test
 )
 
 # Append any extra CLI arguments (these override defaults if duplicated).

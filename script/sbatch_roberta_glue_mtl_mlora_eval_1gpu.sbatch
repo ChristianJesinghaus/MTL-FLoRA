@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=roberta_glue_mlora_eval_1gpu
-#SBATCH --partition=pascal
+#SBATCH --partition=volta
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=16
 #SBATCH --gres=gpu:1

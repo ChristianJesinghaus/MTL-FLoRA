@@ -5,6 +5,7 @@ __pycache__/
 
 # Slurm
 *.out
+*.err 
 # C extensions
 *.so
 
@@ -182,5 +183,6 @@ cython_debug/
 *.sif 
 .sif
 
-
+outputs/
+logs/
 script/

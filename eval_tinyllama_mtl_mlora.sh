@@ -38,16 +38,16 @@ ARGS=(
   --max_length 256
   --num_workers 2
 
-  --lora_r 4
+  --lora_r 32
   --lora_alpha 16
   --lora_dropout 0.05
-  --num_B 2
+  --num_B 3
   --temperature 0.1
 
   --fp16
 
   --save_eval_details
-  --eval_details_max_examples 200
+  #--eval_details_max_examples 200
 )
 
 # Append extra CLI args (override defaults if duplicated)

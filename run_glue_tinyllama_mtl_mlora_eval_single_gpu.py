@@ -3,7 +3,7 @@
 
 This script loads a fine‑tuned TinyLlama mLoRA model and evaluates it on
 all GLUE tasks.  It can load either a full checkpoint
-(``ckpt_*.pt``) or separate adapter/head state files.  The mLoRA
+(`ckpt_*.pt`) or separate adapter/head state files.  The mLoRA
 hyperparameters passed here must match those used during training.
 """
 
@@ -143,7 +143,8 @@ def main() -> None:
     for p in model.parameters():
         p.requires_grad = False
 
-    # Build dataloaders
+    # Build dataloaders. Note that build_dataloaders always returns a list of per‑client task dictionaries,
+    # even when num_clients=1. Unwrap the single element for evaluation so that `task_data` is indexed by task name.
     task_data = build_dataloaders(
         tokenizer,
         max_length=args.max_length,
@@ -158,6 +159,15 @@ def main() -> None:
         save_eval_details=args.save_eval_details,
     )
 
+    # Unwrap the list if there is exactly one element (single‑client setup).
+    if isinstance(task_data, list):
+        if len(task_data) != 1:
+            raise ValueError(
+                f"Expected a single client in eval; got {len(task_data)} clients."
+            )
+        task_data = task_data[0]
+
+    # Run evaluation
     results = evaluate(
         model=model,
         task_data=task_data,

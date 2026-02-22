@@ -37,14 +37,20 @@ logging.getLogger("transformers.tokenization_utils_base").setLevel(logging.ERROR
 # Import generic utilities from the RoBERTa implementation; these
 # functions operate on arbitrary models and are reused here.
 from src.roberta_glue_mtl_mlora.data import build_dataloaders
-from src.roberta_glue_mtl_mlora.fed_utils import (
-    fed_avg,
-    aggregate_mtl_weights,
-    update_global_model,
-    transfer_non_lora_params,
-)
+# Note: ``aggregate_mtl_weights``, ``update_global_model`` and
+# ``transfer_non_lora_params`` are defined below.  They were
+# originally defined in the RoBERTa training script and are
+# duplicated here because they are not exported from
+# ``src.roberta_glue_mtl_mlora.fed_utils``.
 from src.roberta_glue_mtl_mlora.hf_utils import default_hf_home, get_hf_token
 from src.roberta_glue_mtl_mlora.train_loop import train
+# Functions to save checkpoints and adapter/head weights.  We import these
+# here rather than in fine_tune_client so they are available for saving the
+# final aggregated model after the FL loop.
+from src.roberta_glue_mtl_mlora.checkpoint import (
+    save_checkpoint,
+    save_adapter_and_heads,
+)
 from src.roberta_glue_mtl_mlora.utils import set_seed
 
 from tinyllama_glue_mtl_mlora.constants import GLUE_TASKS
@@ -53,6 +59,156 @@ from tinyllama_glue_mtl_mlora.model import (
     cast_trainable_params_to_fp32,
     set_trainable_params,
 )
+
+# -----------------------------------------------------------------------------
+# Federated Averaging helper
+#
+# The RoBERTa training script defines fed_avg inline, but it is not exposed
+# via ``src.roberta_glue_mtl_mlora.fed_utils``.  We therefore reimplement it
+# here to support the ``fedit`` strategy or simple averaging across client
+# LoRA weights.  Given a list of per‑client weight dictionaries, it returns
+# a new dictionary whose tensors are the elementwise average.  This function
+# assumes that all clients provide the same keys and that tensors are on
+# CPU; adjust as needed for your use case.
+def fed_avg(client_weights):
+    """Average LoRA weight dictionaries across clients (simple mean)."""
+    if not client_weights:
+        raise ValueError("fed_avg: No client weights provided")
+    num_clients = len(client_weights)
+    # Deep copy first client's weights to avoid modifying input
+    avg = {k: v.clone() for k, v in client_weights[0].items()}
+    for key in avg.keys():
+        for i in range(1, num_clients):
+            avg[key] += client_weights[i][key]
+        avg[key] = avg[key] / num_clients
+    return avg
+
+# -----------------------------------------------------------------------------
+# Federated stacking and averaging functions copied from the RoBERTa training
+# script.  These functions combine the LoRA weights from multiple clients
+# (when using the FLoRA strategy) by stacking the low‑rank matrices along
+# their rank dimension and averaging the task‑specific B_w matrices.  They
+# accept lists of per‑client weight dictionaries and return a single
+# aggregated dictionary.  See the original RoBERTa script for detailed
+# commentary on the expected shapes.
+
+def stack_A(client_A: list, client_p: list, hidden: int, lora_r: int) -> Dict[str, torch.Tensor]:
+    """Stack A matrices from clients along the LoRA rank dimension."""
+    device = next(iter(client_A[0].values())).device
+    num_clients = len(client_A)
+    stacked = {}
+    for layer in client_A[0]:
+        stacked[layer] = torch.cat(
+            [client_p[i] * client_A[i][layer] for i in range(num_clients)], dim=1
+        ).to(device)
+    return stacked
+
+
+def stack_B(client_B: list, num_B: int, hidden: int, lora_r: int) -> Dict[str, torch.Tensor]:
+    """Stack B matrices from clients along the LoRA rank dimension."""
+    device = next(iter(client_B[0].values())).device
+    num_clients = len(client_B)
+    stacked = {}
+    for layer in client_B[0]:
+        stacked[layer] = torch.cat(
+            [client_B[i][layer] for i in range(num_clients)], dim=2
+        ).to(device)
+    return stacked
+
+
+def stack_lambdas(client_lambdas: list, num_tasks: int, lora_r: int) -> Dict[str, torch.Tensor]:
+    """Stack Lambda matrices from clients into a block‑diagonal tensor."""
+    device = next(iter(client_lambdas[0].values())).device
+    dtype = next(iter(client_lambdas[0].values())).dtype
+    num_clients = len(client_lambdas)
+    stacked = {key: torch.zeros((num_tasks, lora_r, lora_r), dtype=dtype, device=device) for key in client_lambdas[0]}
+    for layer in client_lambdas[0]:
+        lambdas = [client_lambdas[i][layer] for i in range(num_clients)]
+        sizes = [l.shape[1] for l in lambdas]
+        offset = 0
+        for lam, r in zip(lambdas, sizes):
+            stacked[layer][:, offset:offset + r, offset:offset + r] = lam.to(device)
+            offset += r
+    return stacked
+
+
+def avg_B_w(client_B_w: list, num_tasks: int, num_B: int) -> Dict[str, torch.Tensor]:
+    """Average B_w matrices across clients (simple mean)."""
+    num_clients = len(client_B_w)
+    avg = {k: v.clone() for k, v in client_B_w[0].items()}
+    for layer in avg:
+        for i in range(1, num_clients):
+            avg[layer] += client_B_w[i][layer]
+        avg[layer] = avg[layer] / num_clients
+    return avg
+
+
+def aggregate_mtl_weights(
+    client_weights: list,
+    client_p: list,
+    hidden: int,
+    num_B: int,
+    num_tasks: int,
+    lora_r: int,
+) -> Dict[str, torch.Tensor]:
+    """Aggregate per‑client LoRA weights for FLoRA by stacking and averaging."""
+    # Separate LoRA parameters into A, B, lambdas and B_w blocks
+    client_A = []
+    client_B = []
+    client_lambdas = []
+    client_B_w = []
+    for weights in client_weights:
+        client_A.append({k: v for k, v in weights.items() if k.endswith("lora_A")})
+        client_B.append({k: v for k, v in weights.items() if "lora_B" in k and not k.endswith("lora_B_w")})
+        client_lambdas.append({k: v for k, v in weights.items() if k.endswith("lora_lambdas")})
+        client_B_w.append({k: v for k, v in weights.items() if k.endswith("lora_B_w")})
+
+    a_stacked = stack_A(client_A, client_p, hidden, lora_r)
+    b_stacked = stack_B(client_B, num_B, hidden, lora_r)
+    lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
+    b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
+    # Merge into a single dictionary
+    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_avg}
+    return agg_weights
+
+
+def update_global_model(global_model: torch.nn.Module, avg_weights: Dict[str, torch.Tensor]) -> None:
+    """Copy aggregated LoRA weights into the global model (in‑place)."""
+    updated_count = 0
+    shape_mismatches = []
+    with torch.no_grad():
+        for name, param in global_model.named_parameters():
+            if name in avg_weights:
+                weight = avg_weights[name]
+                if param.shape != weight.shape:
+                    shape_mismatches.append((name, param.shape, weight.shape))
+                else:
+                    param.copy_(weight.to(param.device))
+                    updated_count += 1
+    if shape_mismatches:
+        for name, s_old, s_new in shape_mismatches:
+            print(f"[WARNING] Shape mismatch for {name}: model={s_old}, weights={s_new}")
+
+
+def transfer_non_lora_params(
+    old_model: torch.nn.Module,
+    new_model: torch.nn.Module,
+    round_num: int | None = None,
+) -> int:
+    """Transfer non‑LoRA parameters from the old model to the new model."""
+    old_state_dict = old_model.state_dict()
+    new_state_dict = new_model.state_dict()
+    params_transferred = 0
+    for name, param in old_state_dict.items():
+        if 'lora' not in name and name in new_state_dict:
+            if new_state_dict[name].shape == param.shape:
+                new_state_dict[name].copy_(param)
+                params_transferred += 1
+            else:
+                round_str = f" (FL round {round_num})" if round_num is not None else ""
+                print(f"[WARNING] Shape mismatch for {name}{round_str}: old={param.shape}, new={new_state_dict[name].shape}")
+    new_model.load_state_dict(new_state_dict)
+    return params_transferred
 
 
 def parse_args() -> argparse.Namespace:
@@ -364,6 +520,44 @@ def main() -> None:
         # Replace the global model reference
         global_model = new_global_model
         print(f"[INFO] Completed FL round {round_idx + 1}/{args.num_fl_rounds}")
+
+    # -------------------------------------------------------------------------
+    # Save final global model and adapter/head weights
+    #
+    # After completing all FL rounds, `global_model` holds the aggregated LoRA
+    # weights with an expanded rank equal to `flora_r`.  By default the
+    # training loop only saves checkpoints during local fine‑tuning, which
+    # means the final aggregated state is not persisted.  To enable true
+    # evaluation of the global model, we explicitly save both a full
+    # checkpoint (for potential resumption) and the lightweight adapter/head
+    # weights.  These files are named with a "_global_final" suffix so
+    # `resolve_load_paths()` can prefer them when loading via --load_dir.
+    ckpt_dir = os.path.join(args.output_dir, "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    final_ckpt_path = os.path.join(ckpt_dir, "ckpt_global_final.pt")
+    # Save a full model checkpoint (optimizer and scheduler are None here)
+    save_checkpoint(
+        ckpt_path=final_ckpt_path,
+        model=global_model,
+        optimizer=None,
+        scheduler=None,
+        scaler=None,
+        epoch=args.epochs,
+        update_step=0,
+        args=args,
+    )
+    # Save adapter and head states; this writes adapter_state.pt,
+    # heads_state.pt, and also adapter_state_last.pt/heads_state_last.pt.
+    save_adapter_and_heads(args.output_dir, global_model)
+    # Copy to *_final.pt so resolve_load_paths() picks these when present.
+    import shutil
+
+    adapter_src = os.path.join(args.output_dir, "adapter_state.pt")
+    heads_src = os.path.join(args.output_dir, "heads_state.pt")
+    if os.path.exists(adapter_src):
+        shutil.copy(adapter_src, os.path.join(args.output_dir, "adapter_state_final.pt"))
+    if os.path.exists(heads_src):
+        shutil.copy(heads_src, os.path.join(args.output_dir, "heads_state_final.pt"))
 
     # Save run configuration
     with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:
