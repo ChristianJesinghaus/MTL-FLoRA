@@ -1,20 +1,19 @@
 #!/usr/bin/env python3
-"""Train TinyLlama + (MTL-)mLoRA on multi‑task GLUE (single GPU).
+"""Train TinyLlama + (MTL-)mLoRA on multi‑task GLUE (single GPU) with FLoRA stacking.
 
-This script mirrors the functionality of
-``run_glue_roberta_mtl_mlora_train_single_gpu.py`` but targets
-TinyLlama instead of RoBERTa.  It supports federated LoRA
-aggregation (FLoRA) as well as classic federated averaging.  The
-defaults are tuned for a single 1080 Ti GPU with limited VRAM, so
-batch sizes and LoRA rank are smaller than in the RoBERTa run
-script.  Adjust these values as needed for your hardware.
+This script is a modified version of `run_glue_tinyllama_mtl_mlora_train_single_gpu.py` from
+`back_into_the_future`.  It incorporates the improved federated aggregation strategy
+from the `merge-just_a_try_ignore_it` branch and fixes two issues:
 
-Outputs (in ``--output_dir``) include:
+* The aggregation now stacks LoRA B matrices and their weight vectors across clients
+  without averaging the weights.  The global LoRA rank is computed as the sum of
+  per-client ranks, and the number of B matrices is multiplied by the number of clients.
+  A new helper ``stack_B_w`` concatenates ``lora_B_w`` vectors horizontally.
+* The ``mLoRALinear`` layer has a ``block_size`` attribute controlling how the softmax
+  over the B weight vector is computed.  For aggregated models we set this to
+  ``args.num_B`` so that softmax is applied separately within each client's block.
 
-* ``checkpoints/ckpt_*.pt`` — full model checkpoints
-* ``adapter_state*.pt`` — trainable encoder params (LoRA + optional bias/LN)
-* ``heads_state*.pt`` — per‑task classification heads
-* ``eval_latest.json`` / ``eval_epoch_*.json`` — evaluation results
+All other logic (argument parsing, training, checkpointing) remains unchanged.
 """
 
 from __future__ import annotations
@@ -25,7 +24,7 @@ import json
 import os
 import re
 from collections import defaultdict
-from typing import Dict
+from typing import Dict, List
 
 import logging
 
@@ -60,6 +59,12 @@ from tinyllama_glue_mtl_mlora.model import (
     set_trainable_params,
 )
 
+# We import the mLoRA layer here so we can set ``block_size`` later.
+try:
+    from src.adapter.mlora import mLoRALinear as _mLoRALinear  # type: ignore
+except Exception:
+    _mLoRALinear = None  # type: ignore
+
 # -----------------------------------------------------------------------------
 # Federated Averaging helper
 #
@@ -87,13 +92,13 @@ def fed_avg(client_weights):
 # Federated stacking and averaging functions copied from the RoBERTa training
 # script.  These functions combine the LoRA weights from multiple clients
 # (when using the FLoRA strategy) by stacking the low‑rank matrices along
-# their rank dimension and averaging the task‑specific B_w matrices.  They
-# accept lists of per‑client weight dictionaries and return a single
-# aggregated dictionary.  See the original RoBERTa script for detailed
-# commentary on the expected shapes.
+# their rank dimension.  In this modified version we also stack the
+# mLoRA B matrices along the B dimension and concatenate the B_w weight
+# vectors across clients.  The LoRA A matrices are weighted by the
+# client sizes ``client_p``.
 
 def stack_A(client_A: list, client_p: list, hidden: int, lora_r: int) -> Dict[str, torch.Tensor]:
-    """Stack A matrices from clients along the LoRA rank dimension."""
+    """Stack A matrices from clients along the LoRA rank dimension with weighting."""
     device = next(iter(client_A[0].values())).device
     num_clients = len(client_A)
     stacked = {}
@@ -105,14 +110,33 @@ def stack_A(client_A: list, client_p: list, hidden: int, lora_r: int) -> Dict[st
 
 
 def stack_B(client_B: list, num_B: int, hidden: int, lora_r: int) -> Dict[str, torch.Tensor]:
-    """Stack B matrices from clients along the LoRA rank dimension."""
-    device = next(iter(client_B[0].values())).device
+    """
+    Aggregate lora_B matrices from clients along both the B and rank dimensions.
+
+    ``client_B`` is a list where each element maps layer names to tensors of
+    shape ``(num_B_local, hidden, r_i)``.  We construct an aggregated
+    tensor of shape ``(num_B, hidden, lora_r)`` where ``num_B`` is the
+    global number of B matrices (num_B_local * num_clients) and ``lora_r``
+    is the sum of per-client ranks.  Each client's B matrices are placed
+    contiguously in the output along both dimensions to prevent cross‑term
+    interactions during aggregation.
+    """
     num_clients = len(client_B)
+    device = next(iter(client_B[0].values())).device
+    dtype = next(iter(client_B[0].values())).dtype
     stacked = {}
     for layer in client_B[0]:
-        stacked[layer] = torch.cat(
-            [client_B[i][layer] for i in range(num_clients)], dim=2
-        ).to(device)
+        aggregated = torch.zeros(num_B, hidden, lora_r, device=device, dtype=dtype)
+        b_idx = 0
+        r_offset = 0
+        for i in range(num_clients):
+            local_B = client_B[i][layer]  # (num_B_local, hidden, r_i)
+            r_i = local_B.shape[2]
+            for b_local in range(local_B.shape[0]):
+                aggregated[b_idx, :, r_offset:r_offset + r_i] = local_B[b_local]
+                b_idx += 1
+            r_offset += r_i
+        stacked[layer] = aggregated
     return stacked
 
 
@@ -132,15 +156,19 @@ def stack_lambdas(client_lambdas: list, num_tasks: int, lora_r: int) -> Dict[str
     return stacked
 
 
-def avg_B_w(client_B_w: list, num_tasks: int, num_B: int) -> Dict[str, torch.Tensor]:
-    """Average B_w matrices across clients (simple mean)."""
+def stack_B_w(client_B_w: list) -> Dict[str, torch.Tensor]:
+    """
+    Horizontally concatenate the lora_B_w weight vectors from each client.
+
+    Each element of ``client_B_w`` maps layer names to tensors of shape
+    ``(num_tasks, num_B_local)``.  The concatenated output has shape
+    ``(num_tasks, num_B_global)`` with ``num_B_global = num_clients * num_B_local``.
+    """
     num_clients = len(client_B_w)
-    avg = {k: v.clone() for k, v in client_B_w[0].items()}
-    for layer in avg:
-        for i in range(1, num_clients):
-            avg[layer] += client_B_w[i][layer]
-        avg[layer] = avg[layer] / num_clients
-    return avg
+    stacked = {}
+    for layer in client_B_w[0]:
+        stacked[layer] = torch.cat([client_B_w[i][layer] for i in range(num_clients)], dim=1)
+    return stacked
 
 
 def aggregate_mtl_weights(
@@ -151,7 +179,7 @@ def aggregate_mtl_weights(
     num_tasks: int,
     lora_r: int,
 ) -> Dict[str, torch.Tensor]:
-    """Aggregate per‑client LoRA weights for FLoRA by stacking and averaging."""
+    """Aggregate per‑client LoRA weights for FLoRA by stacking and concatenation."""
     # Separate LoRA parameters into A, B, lambdas and B_w blocks
     client_A = []
     client_B = []
@@ -166,9 +194,9 @@ def aggregate_mtl_weights(
     a_stacked = stack_A(client_A, client_p, hidden, lora_r)
     b_stacked = stack_B(client_B, num_B, hidden, lora_r)
     lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
-    b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
+    b_w_stacked = stack_B_w(client_B_w)
     # Merge into a single dictionary
-    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_avg}
+    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_stacked}
     return agg_weights
 
 
@@ -437,6 +465,11 @@ def main() -> None:
         num_B=args.num_B,
         temperature=args.temperature,
     )
+    # After creating the model, set block_size on all mLoRALinear layers
+    if _mLoRALinear is not None:
+        for module in global_model.modules():
+            if isinstance(module, _mLoRALinear):
+                module.block_size = args.num_B
 
     # Select trainable parameters according to flags
     train_bias = not args.freeze_bias
@@ -482,23 +515,63 @@ def main() -> None:
         print(f"[DEBUG] FL round {round_idx + 1}: Aggregating weights from {len(client_weights)} clients")
         if args.strat == "fedit":
             avg_weights = fed_avg(client_weights)
+            next_num_B = args.num_B
         elif args.strat == "centralized":
             # Centralized learning: no averaging; simply pick the first client
             avg_weights = client_weights[0]
-        else:  # Default: FLoRA
-            # Increase the LoRA rank by the number of clients for stacking
-            flora_r *= args.num_clients
+            next_num_B = args.num_B
+        else:  # Default: FLoRA stacking strategy
+            # 1) Determine per-client data sizes for weighting A matrices
+            client_sizes: List[int] = []
+            for client_data_dict in task_data:
+                size = 0
+                # Sum sizes over all tasks for this client
+                for _, data_obj in client_data_dict.items():
+                    train_loader = data_obj.train_loader
+                    # try to estimate dataset size using loader length and batch size
+                    try:
+                        bs = getattr(train_loader, "batch_size", 1)
+                        size += len(train_loader) * bs
+                    except Exception:
+                        size += 0
+                client_sizes.append(size)
+            total_size = sum(client_sizes)
+            if total_size > 0:
+                client_p = [s / total_size for s in client_sizes]
+            else:
+                client_p = [1.0 / len(client_sizes)] * len(client_sizes)
+
+            # 2) Determine new LoRA rank as the sum of per-client ranks
+            client_ranks: List[int] = []
+            for cw in client_weights:
+                found = False
+                for name, tensor in cw.items():
+                    if name.endswith("lora_A"):
+                        # shape of lora_A is (hidden_dim, r_i)
+                        client_ranks.append(tensor.shape[1])
+                        found = True
+                        break
+                if not found:
+                    raise ValueError("Could not determine LoRA rank from client weights")
+            new_flora_r = sum(client_ranks)
+
+            # 3) Determine the global number of B matrices
+            global_num_B = args.num_B * len(client_weights)
+
             hidden_dim = global_model.encoder.config.hidden_size
             avg_weights = aggregate_mtl_weights(
                 client_weights,
-                client_p=[1.0 / args.num_clients] * args.num_clients,
+                client_p=client_p,
                 hidden=hidden_dim,
-                num_B=args.num_B,
+                num_B=global_num_B,
                 num_tasks=len(GLUE_TASKS),
-                lora_r=flora_r,
+                lora_r=new_flora_r,
             )
+            # Update flora_r and next_num_B for the new global model
+            flora_r = new_flora_r
+            next_num_B = global_num_B
 
-        # Create a new global model with potentially expanded rank
+        # Create a new global model with potentially expanded rank and B dimension
         new_global_model = create_model(
             model_name=args.model_name,
             offline=args.offline,
@@ -506,9 +579,16 @@ def main() -> None:
             lora_r=flora_r,
             lora_alpha=args.lora_alpha,
             lora_dropout=args.lora_dropout,
-            num_B=args.num_B,
+            num_B=next_num_B,
             temperature=args.temperature,
         )
+        # Set block_size on all mLoRALinear layers to the local num_B so that softmax is
+        # normalised within each client's block during forward passes.
+        if _mLoRALinear is not None:
+            for module in new_global_model.modules():
+                if isinstance(module, _mLoRALinear):
+                    module.block_size = args.num_B
+
         # Transfer non‑LoRA parameters from the old model to the new model
         transfer_non_lora_params(global_model, new_global_model, round_num=round_idx + 1)
         # Update the new model with the aggregated LoRA weights

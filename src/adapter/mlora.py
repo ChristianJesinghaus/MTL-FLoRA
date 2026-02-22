@@ -38,6 +38,7 @@ def mlora_set_lambda_index(task_id: int):
         _CURRENT_LAMBDA_INDEX.reset(token)
 
 
+
 def _resolve_lambda_index(x: torch.Tensor, lambda_index: Optional[torch.Tensor]) -> torch.Tensor:
     """
     Resolve lambda_index for the current batch.
@@ -115,6 +116,11 @@ class mLoRALinear(nn.Linear, LoRALayer):
         self.dec_param = dec_param
         self.lora_param = lora_param
 
+        # NEW: block_size determines the size of each softmax block for lora_B_w.
+        # When set, softmax will be computed independently within each block rather than globally.
+        # For local models the block_size should equal num_B; for aggregated models it remains the per-client B.
+        self.block_size: Optional[int] = None
+
         if r > 0:
             self.lora_A = nn.Parameter(self.weight.new_zeros((1, r, in_features)))  # task-agnostic
 
@@ -178,7 +184,14 @@ class mLoRALinear(nn.Linear, LoRALayer):
         #   task_B:   [B, out, r]
         lora_B_w = torch.index_select(self.lora_B_w, 0, lambda_index)  # [B, B_num]
         if self.B_scale > 0:
-            lora_B_w = F.softmax(lora_B_w / self.B_scale, dim=-1, dtype=torch.float32)
+            # Apply softmax globally or blockwise depending on block_size.
+            if self.block_size is not None and self.block_size > 0 and (lora_B_w.shape[-1] % self.block_size) == 0:
+                num_blocks = lora_B_w.shape[-1] // self.block_size
+                w = lora_B_w.view(lora_B_w.shape[0], num_blocks, self.block_size)
+                w = F.softmax(w / self.B_scale, dim=-1, dtype=torch.float32)
+                lora_B_w = w.view_as(lora_B_w)
+            else:
+                lora_B_w = F.softmax(lora_B_w / self.B_scale, dim=-1, dtype=torch.float32)
         # ensure dtype matches B
         lora_B_w = lora_B_w.to(self.lora_B.dtype)
 
@@ -336,6 +349,7 @@ class mLoRAMergedLinear(nn.Linear, LoRALayer):
         for i, enable in enumerate(self.enable_lora):
             if enable:
                 if self.B_scale > 0:
+                    # Apply global softmax for merged LoRA modules. Blockwise behaviour is not relevant here.
                     lora_B_w_ = F.softmax(lora_B_w / self.B_scale, dim=-1, dtype=torch.float32).to(lora_B.dtype)
                     B_num, out_features, r = lora_B.shape
                     task_B = lora_B_w_ @ lora_B.view((B_num, -1))

@@ -1,6 +1,16 @@
+"""Model definitions for TinyLlama + mLoRA on GLUE (modified).
+
+This file is a copy of `tinyllama_glue_mtl_mlora/model.py` from the
+`back_into_the_future` branch with a small modification: when replacing
+``nn.Linear`` layers with ``mLoRALinear`` adapters, we set the
+``block_size`` attribute on the new adapter to the number of B matrices
+(``num_B``).  This allows the mLoRA layer to apply its softmax over
+local blocks (one block per client) when used with federated stacking.
+The remainder of the file is identical to the original.
+"""
+
 from __future__ import annotations
 
-from contextlib import contextmanager
 from typing import Dict, Iterable, List, Optional, Tuple
 
 import torch
@@ -8,17 +18,22 @@ import torch.nn as nn
 
 from .constants import GLUE_TASKS, TASK_NUM_LABELS, TASK_TO_ID
 
-# Repo adapter (mLoRA)
-from src.adapter.mlora import mLoRALinear  # noqa: E402
-
-# Context manager to set global task id for mLoRA (required for RoBERTa/BERT-style forwards)
+# Import the mLoRA layer and context manager from the shared adapter
 try:
-    from src.adapter.mlora import mlora_set_lambda_index  # noqa: E402
+    from src.adapter.mlora import mLoRALinear  # type: ignore
+except Exception as exc:  # pragma: no cover
+    raise ImportError(
+        "Could not import mLoRALinear from src.adapter.mlora. "
+        "Ensure that the parent repository includes the adapter implementation."
+    ) from exc
+
+try:
+    from src.adapter.mlora import mlora_set_lambda_index  # type: ignore
 except Exception:
-    mlora_set_lambda_index = None
+    mlora_set_lambda_index = None  # type: ignore
 
 
-def replace_roberta_linears_with_mlora(
+def replace_llama_linears_with_mlora(
     model: nn.Module,
     *,
     target_substrings: Tuple[str, ...],
@@ -29,29 +44,44 @@ def replace_roberta_linears_with_mlora(
     lambda_num: int,
     temperature: float,
 ) -> int:
-    """Replace attention Linear layers with mLoRALinear."""
+    """Replace Llama attention Linear layers with ``mLoRALinear``.
 
+    This function traverses the provided model, finds all modules
+    whose fully qualified name contains any of the substrings in
+    ``target_substrings`` and which are instances of
+    ``torch.nn.Linear``.  Those layers are replaced by
+    ``mLoRALinear`` layers with the specified hyperparameters.  The
+    new layers are initialised from the original weights and placed on
+    the same device/dtype.  The number of replaced layers is
+    returned.
+
+    In this modified version we additionally set the ``block_size``
+    attribute on each new ``mLoRALinear`` instance to ``num_B``.  This
+    informs the adapter that softmax weights should be normalised
+    separately within each block of size ``num_B`` when used with the
+    federated stacking strategy.
+    """
     replaced = 0
-    module_names = [name for name, _ in model.named_modules()]
-
+    # Precompute module names because modifying the module tree
+    # invalidates the iterator returned by ``named_modules``.
+    module_names: List[str] = [name for name, _ in model.named_modules()]
     for name in module_names:
         if not any(s in name for s in target_substrings):
             continue
-
         try:
             target = model.get_submodule(name)
         except AttributeError:
             continue
-
+        # Only replace plain Linear layers
         if not isinstance(target, nn.Linear):
             continue
+        # Avoid double replacement
         if isinstance(target, mLoRALinear):
             continue
-
         parent_name = ".".join(name.split(".")[:-1])
         child_name = name.split(".")[-1]
         parent = model.get_submodule(parent_name) if parent_name else model
-
+        # Construct a new mLoRALinear with the same dimensions
         new_layer = mLoRALinear(
             in_features=target.in_features,
             out_features=target.out_features,
@@ -64,36 +94,71 @@ def replace_roberta_linears_with_mlora(
             lora_dropout=dropout,
             bias=(target.bias is not None),
         )
+        # Place on same device/dtype
         new_layer.to(device=target.weight.device, dtype=target.weight.dtype)
+        # Load original weights into the new layer
         new_layer.load_state_dict(target.state_dict(), strict=False)
-
+        # Set block_size so that softmax is applied within blocks of size num_B
+        # when multiple clients' LoRA adapters are stacked together.
+        new_layer.block_size = num_B
+        # Replace on parent
         setattr(parent, child_name, new_layer)
         replaced += 1
-
     return replaced
 
 
-class MultiTaskRobertaMLoRA(nn.Module):
-    """Shared encoder + per-task classification/regression heads."""
+class MultiTaskLlamaMLoRA(nn.Module):
+    """Shared Llama encoder plus per‑task classification heads.
 
-    def __init__(self, encoder: nn.Module, hidden_size: int):
+    The encoder is assumed to have been wrapped with mLoRA adapters via
+    ``replace_llama_linears_with_mlora``.  For each GLUE task a
+    separate linear head maps the final hidden state (last token) to
+    logits.  During the forward pass the appropriate LoRA lambda index
+    is set via ``mlora_set_lambda_index`` based on the task id.  This
+    ensures that the correct task‑specific B matrices are used.
+    """
+
+    def __init__(self, encoder: nn.Module, hidden_size: int) -> None:
         super().__init__()
         self.encoder = encoder
-        self.heads = nn.ModuleDict({task: nn.Linear(hidden_size, TASK_NUM_LABELS[task]) for task in GLUE_TASKS})
+        # One head per task; note that heads are stored in a ModuleDict for
+        # easy access and separate parameter groups
+        self.heads = nn.ModuleDict(
+            {task: nn.Linear(hidden_size, TASK_NUM_LABELS[task]) for task in GLUE_TASKS}
+        )
 
     def forward(self, task: str, batch: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """Compute logits for a single task.
+
+        Args:
+            task: The GLUE task name.  Must be present in ``TASK_TO_ID``.
+            batch: A dictionary of input tensors as produced by a
+                HuggingFace ``DataCollatorWithPadding`` (e.g. contains
+                ``input_ids`` and ``attention_mask``).  Additional
+                keys are passed through to the underlying encoder.
+
+        Returns:
+            A tensor of shape ``(batch_size, num_labels)`` containing
+            logits for the specified task.
+        """
         if mlora_set_lambda_index is None:
             raise RuntimeError(
-                "mlora_set_lambda_index is not available, but your mLoRA implementation requires a task id.\n"
-                "Please ensure src/adapter/mlora.py provides mlora_set_lambda_index."
+                "mlora_set_lambda_index is not available. Ensure that "
+                "src/adapter/mlora.py defines this context manager so that "
+                "task IDs can be propagated to mLoRALinear layers."
             )
-
+        if task not in TASK_TO_ID:
+            raise ValueError(f"Unknown task '{task}'. Valid tasks: {list(TASK_TO_ID.keys())}")
         task_id = TASK_TO_ID[task]
+        # Set the global lambda index for mLoRA so that the adapter uses
+        # the correct slice of B and Lambda matrices.
         with mlora_set_lambda_index(task_id):
             outputs = self.encoder(**batch)
-
-        cls = outputs.last_hidden_state[:, 0]  # [batch, hidden]
-        logits = self.heads[task](cls)
+        # For decoder models the [CLS] token does not exist; use the
+        # representation of the final token instead.  ``last_hidden_state``
+        # has shape (batch_size, seq_len, hidden_size).
+        final_state = outputs.last_hidden_state[:, -1]  # shape (batch_size, hidden)
+        logits = self.heads[task](final_state)
         return logits
 
 
@@ -105,40 +170,36 @@ def set_trainable_params(
     train_bias: bool = True,
     train_layernorm: bool = True,
 ) -> None:
-    """Freeze everything, then unfreeze requested parameter groups.
+    """Freeze all parameters then unfreeze selected groups.
 
-    - LoRA params: anything with "lora_" in the name
-    - Heads: anything under "heads."
-    - Bias: any parameter ending with ".bias"
-    - LayerNorm: parameters in nn.LayerNorm modules
+    This helper follows the logic of the RoBERTa implementation: all
+    parameters are initially frozen; then LoRA parameters (those whose
+    names contain ``"lora_"``), head parameters (those in
+    ``heads.``), bias terms and layernorm parameters are selectively
+    unfrozen based on the supplied boolean flags.
 
-    NOTE: Bias/LayerNorm belong to the base encoder, so if you train them you must
-    also SAVE them (we do this by saving all trainable encoder params).
+    If you choose to train bias or LayerNorm parameters you must
+    remember to save them along with the LoRA adapter weights.
     """
-
-    # Freeze all
+    # First freeze everything
     for p in model.parameters():
         p.requires_grad = False
-
     # Unfreeze heads
     if train_heads:
         for name, p in model.named_parameters():
             if name.startswith("heads."):
                 p.requires_grad = True
-
-    # Unfreeze LoRA
+    # Unfreeze LoRA parameters
     if train_lora:
         for name, p in model.named_parameters():
             if "lora_" in name:
                 p.requires_grad = True
-
-    # Unfreeze bias
+    # Unfreeze biases
     if train_bias:
         for name, p in model.named_parameters():
             if name.endswith(".bias"):
                 p.requires_grad = True
-
-    # Unfreeze LayerNorm (more robust than name matching)
+    # Unfreeze LayerNorm parameters
     if train_layernorm:
         for module in model.modules():
             if isinstance(module, nn.LayerNorm):
@@ -147,75 +208,19 @@ def set_trainable_params(
 
 
 def cast_trainable_params_to_fp32(model: nn.Module) -> List[str]:
-    """Ensure all trainable params are fp32 (helps stability + AMP scaler)."""
+    """Ensure all trainable parameters are in float32.
 
+    When using mixed precision it is beneficial for the trainable
+    parameters (LoRA, heads, bias, LayerNorm) to remain in FP32 for
+    numerical stability.  This function walks through all
+    trainable parameters and casts them to ``float32``.
+
+    Returns:
+        A list of parameter names that were cast.
+    """
     casted: List[str] = []
     for name, p in model.named_parameters():
         if p.requires_grad and p.dtype != torch.float32:
             p.data = p.data.float()
             casted.append(name)
     return casted
-
-
-def count_params(model: nn.Module) -> Tuple[int, int]:
-    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    total = sum(p.numel() for p in model.parameters())
-    return trainable, total
-
-
-def summarize_trainable_params(model: nn.Module) -> Dict[str, int]:
-    """Return counts per group (heuristic by name/module)."""
-
-    counts = {"lora": 0, "heads": 0, "bias": 0, "layernorm": 0, "other": 0}
-
-    # Identify LN params by id
-    ln_param_ids = set()
-    for m in model.modules():
-        if isinstance(m, nn.LayerNorm):
-            for p in m.parameters(recurse=False):
-                ln_param_ids.add(id(p))
-
-    for name, p in model.named_parameters():
-        if not p.requires_grad:
-            continue
-
-        if name.startswith("heads."):
-            counts["heads"] += p.numel()
-        elif "lora_" in name:
-            counts["lora"] += p.numel()
-        elif id(p) in ln_param_ids:
-            counts["layernorm"] += p.numel()
-        elif name.endswith(".bias"):
-            counts["bias"] += p.numel()
-        else:
-            counts["other"] += p.numel()
-
-    return counts
-
-
-def get_trainable_encoder_state(model: nn.Module) -> Dict[str, torch.Tensor]:
-    """Collect *only* the trainable encoder parameters.
-
-    This is what we save as "adapter_state" (LoRA + optional bias/LN), so we don't
-    have to save the full RoBERTa weights.
-    """
-
-    # We expect model to be MultiTaskRobertaMLoRA; but keep it generic.
-    encoder = getattr(model, "encoder", None)
-    if encoder is None:
-        raise AttributeError("Model has no attribute 'encoder'; expected MultiTaskRobertaMLoRA")
-
-    state: Dict[str, torch.Tensor] = {}
-    for name, p in encoder.named_parameters():
-        if p.requires_grad:
-            state[name] = p.detach().cpu()
-    return state
-
-
-def load_trainable_encoder_state(model: nn.Module, state: Dict[str, torch.Tensor]) -> None:
-    encoder = getattr(model, "encoder", None)
-    if encoder is None:
-        raise AttributeError("Model has no attribute 'encoder'; expected MultiTaskRobertaMLoRA")
-
-    # strict=False: because we only provide a subset of weights
-    encoder.load_state_dict(state, strict=False)
