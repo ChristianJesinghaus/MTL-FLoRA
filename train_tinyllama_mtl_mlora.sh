@@ -64,9 +64,12 @@ ARGS=(
   --save_eval_details
   #--eval_details_max_examples 200
 
+  #Wieder auskommentieren, sobald wieder federated
+  --strat centralized
+
   # Federated learning settings
   --num_fl_rounds 1
-  --num_clients 2
+  --num_clients 1
   --dirichlet_alpha 10.0
 
   # Enable test mode by default (override with --no-test in EXTRA_ARGS)

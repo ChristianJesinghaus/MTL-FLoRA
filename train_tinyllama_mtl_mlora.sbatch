@@ -1,14 +1,14 @@
 #!/bin/bash
 #SBATCH --job-name=tinyllama_mtl_train
-#SBATCH --output=logs/tinyllama_train_epoch1_flround1_numB3_alpha10.out
-#SBATCH --error=logs/tinyllama_train_epoch1_flround1_numB3_alpha10.err
+#SBATCH --output=logs/tinyllama_train_centralized_epoch1_flround1_numB3_alpha10.out
+#SBATCH --error=logs/tinyllama_train_centralized_epoch1_flround1_numB3_alpha10.err
 #SBATCH --ntasks=1
 #SBATCH --partition=volta
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=24G
-#SBATCH --time=03:00:00
+#SBATCH --time=04:00:00
 
 # Slurm submission script for training the TinyLlama multi‑task mLoRA
 # model.  Adjust the resource requirements (cpus, memory, time)
@@ -47,7 +47,7 @@ if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
   OUT_DIR="$1"
   shift
 else
-  OUT_DIR="${REPO_ROOT}/outputs/tinyllama_train_epoch1_flround1_numB3_alpha10"
+  OUT_DIR="${REPO_ROOT}/outputs/tinyllama_train_centralized_epoch1_flround1_numB3_alpha10"
 fi
 mkdir -p "${OUT_DIR}"
 
