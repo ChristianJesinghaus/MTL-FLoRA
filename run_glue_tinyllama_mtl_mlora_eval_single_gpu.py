@@ -28,11 +28,7 @@ from src.roberta_glue_mtl_mlora.checkpoint import (
     load_from_checkpoint,
     resolve_load_paths,
 )
-# Import the dataloader from the test-aware module.  The original
-# dataloader only supported validation splits; this variant accepts
-# an ``eval_split`` argument so we can evaluate on the GLUE test
-# split.  The rest of the API is identical.
-from src.roberta_glue_mtl_mlora.data_eval_test import build_dataloaders
+from src.roberta_glue_mtl_mlora.data import build_dataloaders
 from src.roberta_glue_mtl_mlora.eval_loop import evaluate
 from src.roberta_glue_mtl_mlora.hf_utils import default_hf_home, get_hf_token
 from src.roberta_glue_mtl_mlora.utils import set_seed
@@ -119,19 +115,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--eval_details_only_errors", action="store_true")
     p.add_argument("--eval_details_topk", type=int, default=2)
     p.add_argument("--stsb_abs_err_threshold", type=float, default=0.5)
-
-    # Choice of evaluation split.  The default ("validation") uses
-    # validation sets for evaluation.  When set to "test" the dataloader
-    # will return test splits instead.  GLUE test splits do not include
-    # gold labels, so metrics are not meaningful; evaluation will only
-    # record predictions.
-    p.add_argument(
-        "--eval_split",
-        type=str,
-        default="validation",
-        choices=["validation", "test"],
-        help="Which GLUE split to use for evaluation: 'validation' (default) or 'test'",
-    )
 
     return p.parse_args()
 
@@ -225,9 +208,6 @@ def main() -> None:
         hf_token=hf_token,
         offline=args.offline,
         save_eval_details=args.save_eval_details,
-        # Use the user-specified evaluation split.  When 'test', the
-        # dataloader will load test splits instead of validation splits.
-        eval_split=args.eval_split,
     )
 
     # Unwrap the list if there is exactly one element (single‑client setup).
