@@ -29,7 +29,7 @@ ARGS=(
   --num_workers 2
 
   # mLoRA MUST match training (override via EXTRA_ARGS if needed)
-  --lora_r 8
+  --lora_r 32
   --lora_alpha 16
   --lora_dropout 0.05
   --num_B 3
@@ -41,6 +41,7 @@ ARGS=(
   # eval details dump (override via EXTRA_ARGS)
   --save_eval_details
   --eval_details_max_examples 200
+  --load_global_model
 )
 
 # Append extra args from CLI

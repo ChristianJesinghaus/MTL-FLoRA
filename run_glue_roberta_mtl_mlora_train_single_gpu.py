@@ -36,6 +36,8 @@ from src.roberta_glue_mtl_mlora.factory import create_model, create_tokenizer
 from src.roberta_glue_mtl_mlora.hf_utils import default_hf_home, get_hf_token
 from src.roberta_glue_mtl_mlora.fed_utils import *
 from src.roberta_glue_mtl_mlora.constants import GLUE_TASKS
+from src.roberta_glue_mtl_mlora.eval_loop import evaluate
+
 
 from src.roberta_glue_mtl_mlora.model import (
     cast_trainable_params_to_fp32,
@@ -141,10 +143,11 @@ def fine_tune_client(model: torch.nn.Module, client_data: dict, device: torch.de
     args_for_ckpt=args,
     )
     client_lora_weights = {name: param.detach().cpu().clone() for name, param in model.named_parameters() if 'lora' in name}
+    client_heads = {name: param.detach().cpu().clone() for name, param in model.named_parameters() if 'heads' in name}
     print(f"[DEBUG] fine_tune_client: Extracted {len(client_lora_weights)} LoRA weight matrices")
     for name, tensor in list(client_lora_weights.items())[:3]:  # Print first 3 for brevity
         print(f"  {name}: shape={tensor.shape}")
-    return client_lora_weights
+    return client_lora_weights, client_heads
 
 # Federated Averaging function for LoRA weights
 def fed_avg(client_weights):
@@ -463,28 +466,34 @@ def main() -> None:
     for round in range(args.num_fl_rounds):
         print(f"[INFO] Starting FL round {round+1}/{args.num_fl_rounds}")
         client_weights = []
+        client_heads = []
         for client_id in range(args.num_clients):
             print(f"[INFO] Fine-tuning client {client_id+1}/{args.num_clients}")
             client_model = copy.deepcopy(global_model)
             client_data = task_data[client_id]
-            client_lora_weights = fine_tune_client(client_model, client_data, device, args, use_amp)
+            client_lora_weights, client_task_heads = fine_tune_client(client_model, client_data, device, args, use_amp)
             print(f"[DEBUG] FL round {round+1}: Client {client_id+1} returned {len(client_lora_weights)} LoRA matrices")
             for name, tensor in list(client_lora_weights.items())[:2]:
                 print(f"  {name}: shape={tensor.shape}, min={tensor.min():.6f}, max={tensor.max():.6f}, mean={tensor.mean():.6f}")
             client_weights.append(client_lora_weights)
+            client_heads.append(client_task_heads)
         
         # Aggregate weights
         print(f"[DEBUG] FL round {round+1}: Aggregating weights from {len(client_weights)} clients")
     
         avg_weights = dict()
+        avg_heads = dict()
         #avg_weights = fed_avg(client_weights)
         #avg_weights = client_weights[0]
         if args.strat == "fedit":
             avg_weights = fed_avg(client_weights)
+            avg_heads = fed_avg(client_heads)
         elif args.strat == "centralized":
-            avg_weights = client_weights
+            avg_weights = client_weights[0]
+            avg_heads = client_heads[0]
         else: # default to FLoRA
             flora_r *= args.num_clients
+            '''
             avg_weights = aggregate_mtl_weights(
                 client_weights, 
                 client_p=[1.0/args.num_clients] * args.num_clients,
@@ -493,22 +502,10 @@ def main() -> None:
                 num_tasks=len(GLUE_TASKS),
                 lora_r=flora_r 
             )
-        '''
-        # Debug: Check aggregated weights
-        print(f"[DEBUG] FL round {round+1}: Aggregated weights summary:")
-        agg_lora_a_shapes = []
-        agg_lora_b_shapes = []
-        for name, tensor in avg_weights.items():
-            if name.endswith("lora_A"):
-                agg_lora_a_shapes.append(tensor.shape)
-            elif "lora_B" in name and not name.endswith("lora_B_w"):
-                agg_lora_b_shapes.append(tensor.shape)
-        
-        if agg_lora_a_shapes:
-            print(f"  lora_A shape samples: {agg_lora_a_shapes[:2]}, expected: (1, {flora_r}, 768)")
-        if agg_lora_b_shapes:
-            print(f"  lora_B shape samples: {agg_lora_b_shapes[:2]}, expected: (3, 768, {flora_r}) or similar")
-        '''
+            '''
+            avg_weights = aggregate_lora_parameters(client_weights)
+            avg_heads = fed_avg(client_heads)
+
         # Create new global model with potentially expanded rank
         new_global_model = create_model(
             model_name=args.model_name,
@@ -526,7 +523,7 @@ def main() -> None:
         
         # Update global model with aggregated LoRA weights
         print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated LoRA weights")
-        update_global_model(new_global_model, avg_weights)
+        update_global_model(new_global_model, {**avg_weights, **avg_heads})
         
         # Ensure trainable params are set correctly for the new model
         set_trainable_params(new_global_model, train_bias=train_bias, train_layernorm=train_ln)
@@ -560,6 +557,26 @@ def main() -> None:
     # Save run config
     with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:
         json.dump(vars(args), f, indent=2)
+    
+    #evaluate global model
+    results = evaluate(
+        model=global_model,
+        task_data=task_data[0],
+        device=device,
+        use_amp=use_amp,
+        output_dir=args.output_dir,
+        tag="eval_only",
+        save_details=True,
+        details_max_examples=200,
+        details_only_errors=False,
+        details_topk=2,
+        stsb_abs_err_threshold=0.5,
+    )
+
+    print("[eval_only] results:")
+    print(json.dumps(results, indent=2))
+    with open(os.path.join(args.output_dir, "eval_only_metrics.json"), "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":
