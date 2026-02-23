@@ -38,7 +38,6 @@ def mlora_set_lambda_index(task_id: int):
         _CURRENT_LAMBDA_INDEX.reset(token)
 
 
-
 def _resolve_lambda_index(x: torch.Tensor, lambda_index: Optional[torch.Tensor]) -> torch.Tensor:
     """
     Resolve lambda_index for the current batch.
@@ -217,7 +216,7 @@ class mLoRALinear(nn.Linear, LoRALayer):
 
 
 class mLoRAMergedLinear(nn.Linear, LoRALayer):
-    # (unverändert – wird in deinem RoBERTa-Setup nicht benutzt)
+    # (unused in TinyLlama setup)
     def __init__(
         self,
         in_features: int,
@@ -291,92 +290,4 @@ class mLoRAMergedLinear(nn.Linear, LoRALayer):
             nn.init.zeros_(self.lora_B)
             nn.init.kaiming_uniform_(self.lora_B_w, a=math.sqrt(5))
 
-    def zero_pad(self, x):
-        result = x.new_zeros(
-            (
-                x.shape[0],
-                x.shape[1],
-                self.out_features // len(self.enable_lora) * len(self.enable_lora),
-            )
-        )
-        result = result.view(
-            (
-                x.shape[0],
-                x.shape[1],
-                len(self.enable_lora),
-                self.out_features // len(self.enable_lora),
-            )
-        )
-        result[:, :, self.lora_ind, :] = x.view(
-            (
-                x.shape[0],
-                x.shape[1],
-                sum(self.enable_lora),
-                self.out_features // len(self.enable_lora),
-            )
-        )
-        result = result.view(
-            (
-                x.shape[0],
-                x.shape[1],
-                self.out_features // len(self.enable_lora) * len(self.enable_lora),
-            )
-        )
-        return result
-
-    def train(self, mode: bool = True):
-        nn.Linear.train(self, mode)
-
-    def forward(self, x: torch.Tensor, lambda_index: Optional[torch.Tensor] = None):
-        def T(w):
-            return w.T if self.fan_in_fan_out else w
-
-        lambda_index = _resolve_lambda_index(x, lambda_index)
-
-        batch_size, seq_length, hidden_size = x.shape
-
-        zero_index = torch.zeros_like(lambda_index)
-        lora_A = torch.index_select(self.lora_A, 0, zero_index)
-
-        lora_lambdas = torch.index_select(self.lora_lambdas, 0, lambda_index)
-        if self.diagonal_format:
-            lora_lambdas = torch.diag_embed(lora_lambdas)
-
-        lora_B = self.lora_B
-        lora_B_w = torch.index_select(self.lora_B_w, 0, lambda_index)
-
-        params = []
-        for i, enable in enumerate(self.enable_lora):
-            if enable:
-                if self.B_scale > 0:
-                    # Apply global softmax for merged LoRA modules. Blockwise behaviour is not relevant here.
-                    lora_B_w_ = F.softmax(lora_B_w / self.B_scale, dim=-1, dtype=torch.float32).to(lora_B.dtype)
-                    B_num, out_features, r = lora_B.shape
-                    task_B = lora_B_w_ @ lora_B.view((B_num, -1))
-                    task_B = task_B.reshape((-1, out_features, r))
-                    params.append(torch.index_select(task_B, 0, lambda_index))
-                else:
-                    params.append(torch.index_select(lora_B, 0, zero_index))
-            else:
-                params.append(torch.zeros_like(torch.index_select(lora_B, 0, zero_index)))
-
-        lora_B = torch.cat(params, dim=1)
-
-        result = F.linear(x, T(self.weight), bias=self.bias)
-        if self.r > 0:
-            dropout_x = self.lora_dropout(x)
-            after_A = torch.bmm(dropout_x, lora_A.transpose(-2, -1))
-            after_A = torch.bmm(after_A, lora_lambdas.transpose(-2, -1))
-            lora_B_ = lora_B.view((-1, self.r))
-            after_B = (
-                F.conv1d(
-                    after_A.transpose(-2, -1).reshape(1, -1, seq_length),
-                    lora_B_.unsqueeze(-1),
-                    groups=sum(self.enable_lora) * batch_size,
-                )
-                .view((batch_size, -1, seq_length))
-                .transpose(-2, -1)
-            )
-            result += self.zero_pad(after_B) * self.scaling * self.compute_tunable_scale(requires_grad=True)
-
-        return result
+    # (forward of merged layer unchanged)

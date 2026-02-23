@@ -22,9 +22,9 @@ from typing import Dict, List, Optional, Tuple
 # are available and that the number of label dimensions in
 # ``TASK_NUM_LABELS`` below matches your chosen tasks.
 GLUE_TASKS: List[str] = [
-    "cola",
+    #"cola",
     "sst2",
-    # "mrpc",
+     "mrpc",
     # "qqp",
     # "mnli",
     # "qnli",

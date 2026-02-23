@@ -7,6 +7,14 @@ This file is a copy of `tinyllama_glue_mtl_mlora/model.py` from the
 (``num_B``).  This allows the mLoRA layer to apply its softmax over
 local blocks (one block per client) when used with federated stacking.
 The remainder of the file is identical to the original.
+
+In addition, we restore the ``get_trainable_encoder_state`` and
+``load_trainable_encoder_state`` helper functions that were present in
+the RoBERTa implementation.  These functions collect and restore only
+those parameters of the encoder that are trainable (e.g. LoRA, bias and
+LayerNorm).  They are required by ``src/roberta_glue_mtl_mlora/checkpoint.py``
+to save and load the adapter state and must be included for
+compatibility.
 """
 
 from __future__ import annotations
@@ -224,3 +232,49 @@ def cast_trainable_params_to_fp32(model: nn.Module) -> List[str]:
             p.data = p.data.float()
             casted.append(name)
     return casted
+
+
+def get_trainable_encoder_state(model: nn.Module) -> Dict[str, torch.Tensor]:
+    """Collect *only* the trainable encoder parameters.
+
+    This helper function mirrors the one in the original RoBERTa
+    implementation.  It inspects the ``encoder`` attribute of the
+    model and collects all parameters that have ``requires_grad=True``.
+    These parameters correspond to the LoRA adapters, and optionally
+    bias and LayerNorm weights, which need to be saved for checkpointing.
+
+    Args:
+        model: A ``MultiTaskLlamaMLoRA`` (or similar) instance.
+
+    Returns:
+        A dictionary mapping parameter names to detached CPU tensors for all
+        trainable encoder parameters.
+    """
+    encoder = getattr(model, "encoder", None)
+    if encoder is None:
+        raise AttributeError("Model has no attribute 'encoder'; expected MultiTaskLlamaMLoRA")
+
+    state: Dict[str, torch.Tensor] = {}
+    for name, p in encoder.named_parameters():
+        if p.requires_grad:
+            state[name] = p.detach().cpu()
+    return state
+
+
+def load_trainable_encoder_state(model: nn.Module, state: Dict[str, torch.Tensor]) -> None:
+    """Load a previously saved state of trainable encoder parameters.
+
+    This helper complements ``get_trainable_encoder_state``.  It loads
+    the provided state dict into the ``encoder`` attribute of ``model``
+    with ``strict=False`` so that only matching keys are updated.
+
+    Args:
+        model: A ``MultiTaskLlamaMLoRA`` (or similar) instance.
+        state: A dictionary of parameter tensors previously produced by
+            ``get_trainable_encoder_state``.
+    """
+    encoder = getattr(model, "encoder", None)
+    if encoder is None:
+        raise AttributeError("Model has no attribute 'encoder'; expected MultiTaskLlamaMLoRA")
+
+    encoder.load_state_dict(state, strict=False)

@@ -5,6 +5,13 @@ This script loads a fine‑tuned TinyLlama mLoRA model and evaluates it on
 all GLUE tasks.  It can load either a full checkpoint
 (`ckpt_*.pt`) or separate adapter/head state files.  The mLoRA
 hyperparameters passed here must match those used during training.
+
+This version includes a fix for the Softmax normalisation of the mLoRA B
+weights: after loading the model, the `block_size` attribute is set on
+each mLoRALinear layer so that the softmax is computed separately within
+each client's block of B adapters. Without this fix, the softmax would
+normalise over all concatenated B adapters and produce incorrect
+logits on aggregated models.
 """
 
 from __future__ import annotations
@@ -27,6 +34,15 @@ from src.roberta_glue_mtl_mlora.hf_utils import default_hf_home, get_hf_token
 from src.roberta_glue_mtl_mlora.utils import set_seed
 
 from tinyllama_glue_mtl_mlora.factory import create_model, create_tokenizer
+
+# Import the mLoRALinear class so we can set the block_size on each layer.
+# This ensures that the softmax over the B weight vector is computed
+# within each client's block of adapters rather than over all B adapters.
+try:
+    # type: ignore because the module may not declare typing information
+    from src.adapter.mlora import mLoRALinear as _mLoRALinear  # type: ignore
+except Exception:
+    _mLoRALinear = None  # type: ignore
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,8 +78,27 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--lora_r", type=int, default=4)
     p.add_argument("--lora_alpha", type=int, default=16)
     p.add_argument("--lora_dropout", type=float, default=0.05)
-    p.add_argument("--num_B", type=int, default=2)
+    # ``num_B`` is the number of B matrices *per client* (local block size).
+    # For aggregated models this may differ from the global number of B matrices.
+    p.add_argument("--num_B", type=int, default=2, help="Local number of B matrices per client")
     p.add_argument("--temperature", type=float, default=0.1)
+    # ``global_num_B`` allows overriding the number of B matrices when creating
+    # the model, useful for evaluating aggregated models.  If unset, the
+    # model uses ``--num_B`` as both global and local counts.
+    p.add_argument(
+        "--global_num_B",
+        type=int,
+        default=None,
+        help="Global number of B matrices for the aggregated model; overrides num_B",
+    )
+    # ``block_size`` explicitly sets the block size for softmax normalisation over
+    # the B weight vector.  If unset, defaults to ``--num_B`` (local block size).
+    p.add_argument(
+        "--block_size",
+        type=int,
+        default=None,
+        help="Block size for mLoRA softmax; defaults to num_B if unset",
+    )
 
     # Mixed precision
     p.add_argument("--fp16", action="store_true")
@@ -113,6 +148,11 @@ def main() -> None:
     print(f"[INFO] output_dir={args.output_dir}")
 
     tokenizer = create_tokenizer(args.model_name, offline=args.offline)
+    # Determine the number of B matrices to use when constructing the model.  For
+    # aggregated models this may differ from the local block size passed via
+    # ``--num_B``.  If ``--global_num_B`` is provided, it overrides the
+    # ``num_B`` argument when creating the model.
+    num_B_model = args.global_num_B if args.global_num_B is not None else args.num_B
     model = create_model(
         model_name=args.model_name,
         offline=args.offline,
@@ -120,11 +160,11 @@ def main() -> None:
         lora_r=args.lora_r,
         lora_alpha=args.lora_alpha,
         lora_dropout=args.lora_dropout,
-        num_B=args.num_B,
+        num_B=num_B_model,
         temperature=args.temperature,
     )
 
-    # Load weights
+    # Load weights (either from full checkpoint or from adapter/head state files)
     if args.load_ckpt:
         print(f"[CKPT] Loading full checkpoint from {args.load_ckpt}")
         load_from_checkpoint(args.load_ckpt, model=model, optimizer=None, scheduler=None, scaler=None, strict_heads=True)
@@ -139,7 +179,18 @@ def main() -> None:
         print(f"[LOAD] heads={heads_path}")
         load_adapter_and_heads(model, adapter_path=adapter_path, heads_path=heads_path, strict_heads=True)
 
-    # Disable gradients
+    # Set block_size on each mLoRALinear layer so softmax is applied per client block
+    if _mLoRALinear is not None:
+        for module in model.modules():
+            if isinstance(module, _mLoRALinear):
+                # If --block_size is provided, use it; otherwise default to args.num_B.
+                # This ensures that for aggregated models the softmax normalisation
+                # operates over the original local block size rather than the global
+                # number of B matrices.
+                bs = args.block_size if args.block_size is not None else args.num_B
+                module.block_size = bs
+
+    # Disable gradients for evaluation
     for p in model.parameters():
         p.requires_grad = False
 

@@ -7,9 +7,9 @@ from typing import Dict, List, Optional, Tuple
 # -----------------------------
 
 GLUE_TASKS: List[str] = [
-    "cola",
+    #"cola",
     "sst2",
-#    "mrpc",
+    "mrpc",
 #    "qqp",
 #    "mnli",
 #    "qnli",
