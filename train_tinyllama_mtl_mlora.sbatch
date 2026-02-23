@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=tinyllama_mtl_train
-#SBATCH --output=logs/tinyllama_train_%j.out
-#SBATCH --error=logs/tinyllama_train_%j.err
+#SBATCH --output=logs/tinyllama_train_epoch1_flround1_numB3_alpha10.out
+#SBATCH --error=logs/tinyllama_train_epoch1_flround1_numB3_alpha10.err
 #SBATCH --ntasks=1
 #SBATCH --partition=volta
 #SBATCH --nodes=1
@@ -47,7 +47,7 @@ if [[ $# -gt 0 && ! "$1" =~ ^- ]]; then
   OUT_DIR="$1"
   shift
 else
-  OUT_DIR="${REPO_ROOT}/outputs/tinyllama_train_${SLURM_JOB_ID}"
+  OUT_DIR="${REPO_ROOT}/outputs/tinyllama_train_epoch1_flround1_numB3_alpha10"
 fi
 mkdir -p "${OUT_DIR}"
 
