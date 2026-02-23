@@ -51,7 +51,7 @@ ARGS=(
   --lora_r 8
   --lora_alpha 16
   --lora_dropout 0.05
-  --num_B 3
+  --num_B 2
   --temperature 0.1
 
   # Mixed precision
