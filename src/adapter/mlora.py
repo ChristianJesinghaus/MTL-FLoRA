@@ -124,7 +124,7 @@ class mLoRALinear(nn.Linear, LoRALayer):
                 self.lora_lambdas = nn.Parameter(self.weight.new_zeros((lambda_num, r)))  # task-specific
 
             self.lora_B = nn.Parameter(self.weight.new_zeros((B_num, out_features, r)))  # task-agnostic
-            self.lora_B_w = nn.Parameter(self.weight.new_zeros((lambda_num, B_num)))    # task-specific
+            self.lora_B_w = nn.Parameter(self.weight.new_zeros((lambda_num, B_num, out_features, r)))    # task-specific, modified for FLoRA
             self.scaling = lora_alpha / r
 
             self.weight.requires_grad = False
@@ -176,14 +176,15 @@ class mLoRALinear(nn.Linear, LoRALayer):
         #   lora_B_w: [B, B_num]
         #   lora_B:   [B_num, out, r]
         #   task_B:   [B, out, r]
-        lora_B_w = torch.index_select(self.lora_B_w, 0, lambda_index)  # [B, B_num]
+        lora_B_w = torch.index_select(self.lora_B_w, 0, lambda_index)  # [B, B_num, out, r]
         if self.B_scale > 0:
-            lora_B_w = F.softmax(lora_B_w / self.B_scale, dim=-1, dtype=torch.float32)
+            lora_B_w = F.softmax(lora_B_w / self.B_scale, dim=1, dtype=torch.float32)
         # ensure dtype matches B
         lora_B_w = lora_B_w.to(self.lora_B.dtype)
 
         # Broadcast multiply + reduce over B_num
-        task_B = (lora_B_w[:, :, None, None] * self.lora_B[None, :, :, :]).sum(dim=1)  # [B, out, r]
+        #task_B = (lora_B_w[:, :, None, None] * self.lora_B[None, :, :, :]).sum(dim=1)  # [B, out, r]
+        task_B = (lora_B_w * self.lora_B[None, :, :, :]).sum(dim=1) # [B, out, r] for FLoRA compatibility
         lora_B = task_B
 
         # base projection
@@ -254,7 +255,7 @@ class mLoRAMergedLinear(nn.Linear, LoRALayer):
             self.lora_B = nn.Parameter(
                 self.weight.new_zeros((B_num, out_features // len(enable_lora) * sum(enable_lora), r))
             )
-            self.lora_B_w = nn.Parameter(self.weight.new_zeros((lambda_num, B_num)))
+            self.lora_B_w = nn.Parameter(self.weight.new_zeros((lambda_num, B_num, out_features, r)))
             self.scaling = lora_alpha / r
 
             self.weight.requires_grad = False
@@ -336,9 +337,9 @@ class mLoRAMergedLinear(nn.Linear, LoRALayer):
         for i, enable in enumerate(self.enable_lora):
             if enable:
                 if self.B_scale > 0:
-                    lora_B_w_ = F.softmax(lora_B_w / self.B_scale, dim=-1, dtype=torch.float32).to(lora_B.dtype)
+                    lora_B_w_ = F.softmax(lora_B_w / self.B_scale, dim=1, dtype=torch.float32).to(lora_B.dtype)
                     B_num, out_features, r = lora_B.shape
-                    task_B = lora_B_w_ @ lora_B.view((B_num, -1))
+                    task_B = lora_B_w_ @ lora_B.view((B_num, 1))
                     task_B = task_B.reshape((-1, out_features, r))
                     params.append(torch.index_select(task_B, 0, lambda_index))
                 else:
