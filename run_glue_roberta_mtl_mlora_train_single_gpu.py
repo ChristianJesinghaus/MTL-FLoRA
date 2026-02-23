@@ -538,6 +538,27 @@ def main() -> None:
         
         # Replace global model reference and update current rank
         global_model = new_global_model
+
+        #evaluate global model
+        results = evaluate(
+            model=global_model,
+            task_data=task_data[0],
+            device=device,
+            use_amp=use_amp,
+            output_dir=args.output_dir,
+            tag="eval_only",
+            save_details=True,
+            details_max_examples=200,
+            details_only_errors=False,
+            details_topk=2,
+            stsb_abs_err_threshold=0.5,
+        )
+
+        print(f"[eval_only] results {round+1}/{args.num_fl_rounds}:")
+        print(json.dumps(results, indent=2))
+        with open(os.path.join(args.output_dir, f"eval_only_metrics{round+1}.json"), "w", encoding="utf-8") as f:
+            json.dump(results, f, indent=2)
+
         print(f"[INFO] Completed FL round {round+1}/{args.num_fl_rounds}")
     
     # Save global model after FL training
@@ -557,26 +578,6 @@ def main() -> None:
     # Save run config
     with open(os.path.join(args.output_dir, "run_config.json"), "w", encoding="utf-8") as f:
         json.dump(vars(args), f, indent=2)
-    
-    #evaluate global model
-    results = evaluate(
-        model=global_model,
-        task_data=task_data[0],
-        device=device,
-        use_amp=use_amp,
-        output_dir=args.output_dir,
-        tag="eval_only",
-        save_details=True,
-        details_max_examples=200,
-        details_only_errors=False,
-        details_topk=2,
-        stsb_abs_err_threshold=0.5,
-    )
-
-    print("[eval_only] results:")
-    print(json.dumps(results, indent=2))
-    with open(os.path.join(args.output_dir, "eval_only_metrics.json"), "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
 
 
 if __name__ == "__main__":

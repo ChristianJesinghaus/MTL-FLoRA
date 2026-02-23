@@ -251,7 +251,7 @@ def convert_result_to_dict(result): # TODO refactor: return dict instead of List
 
 
 # TODO: Set correct weights per clients
-def aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.6, "client_2": 0.4 }):
+def aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.5, "client_2": 0.5 }):
 
     zipped_client_layers = []
 
