@@ -8,7 +8,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=24G
-#SBATCH --time=1-00:00:00
+#SBATCH --time=03:00:00
 
 # Slurm submission script for training the TinyLlama multi‑task mLoRA
 # model.  Adjust the resource requirements (cpus, memory, time)
