@@ -66,9 +66,11 @@ def print_shapes_per_parameter(client_weights):
         print("No client weights to print")
         return
     
-    # Print shapes for each key
-    for key in sorted(client_weights.keys()):
-        print(f"{key}: {tuple(client_weights[key].shape)}")
+    for index, client in enumerate(client_weights):
+        print(f"Client {index}")
+        # Print shapes for each key
+        for key in sorted(client.keys()):
+            print(f"{key}: {tuple(client[key].shape)}")
 
 
 
@@ -105,7 +107,9 @@ def aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.5, "c
         if not client_matrices:
             continue
         
-        print(f"Processing key: {key_string}, lora_param: {lora_param}")
+        #print(f"Processing key: {key_string}, shape: {client_matrices[0].shape}")
+        #print("Shapes before aggregation:")
+        #print_shapes_per_parameter(client_weights)
         
         # Aggregate based on lora_param type
         if lora_param == "lora_A":
