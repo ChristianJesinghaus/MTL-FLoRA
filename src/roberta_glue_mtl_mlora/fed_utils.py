@@ -85,7 +85,7 @@ def print_shapes_per_parameter(client_weights):
 
 
 
-def aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.6, "client_2": 0.4 }):
+def aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 1.5, "client_2": 1.5 }):
     """
     Aggregate LoRA parameters across clients by matching full keys.
     For each unique parameter key, collect matrices from all clients and aggregate.
