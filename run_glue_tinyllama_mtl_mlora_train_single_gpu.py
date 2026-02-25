@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Train TinyLlama + (MTL-)mLoRA on multi‑task GLUE (single GPU) with FLoRA stacking.
+"""
+Modified TinyLlama mLoRA training script supporting a manual client_p override.
 
-This script extends the original FL training script by *also* performing
-federated averaging over the per‑task classification heads.  In the base
-implementation only the LoRA adapters were aggregated, while the heads
-remained fixed to their initial values.  When ``--num_fl_rounds`` and
-``--num_clients`` are greater than one this resulted in clients discarding
-their locally learned heads after each round.  Here we extract the head
-weights from each client, compute a weighted average (proportional to the
-client dataset sizes) and copy that averaged head back into the global
-model.  As a result all clients start each round with identical heads and
-the head parameters benefit from the data of all clients.
+This script extends the original FL training script by adding a new command line
+option ``--client_p`` which allows the user to override the automatic weighting
+of clients during federated averaging.  Normally the training loop computes
+``client_p`` from the relative data sizes of each client.  When the new
+argument is provided, it may contain either a single float (which will be
+applied to all clients) or one weight per client.  The values are
+normalised to sum to one before being used.
 
-The script also retains the FLoRA stacking aggregation for LoRA adapters,
-including proper block‑wise softmax normalisation via ``block_size``.
+Usage:
+    python3 train.py --client_p 1.0    # equal weighting for all clients
+    python3 train.py --client_p 0.8 0.2  # explicit weighting for two clients
+
+All other behaviour matches the original script.  See below for details.
 """
 
 from __future__ import annotations
@@ -62,7 +63,6 @@ try:
     from src.adapter.mlora import mLoRALinear as _mLoRALinear  # type: ignore
 except Exception:
     _mLoRALinear = None  # type: ignore
-
 
 ###############################################################################
 # Federated Averaging helper functions
@@ -417,6 +417,18 @@ def parse_args() -> argparse.Namespace:
         help="Federated aggregation strategy: 'FLoRA', 'fedit' or 'centralized'",
     )
 
+    # New: Override client weights in federated averaging
+    p.add_argument(
+        "--client_p",
+        type=float,
+        nargs="*",
+        default=None,
+        help=(
+            "Optional override for client_p weighting. Provide one value to apply uniformly "
+            "to all clients, or a value for each client. The values will be normalised to sum to 1."
+        ),
+    )
+
     # Test mode
     p.add_argument(
         "--test",
@@ -595,6 +607,22 @@ def main() -> None:
         else:
             client_p = [1.0 / len(client_sizes)] * len(client_sizes)
 
+        # Override client_p if provided
+        if args.client_p is not None:
+            override = list(args.client_p)
+            # If only one value is given, replicate it for all clients
+            if len(override) == 1:
+                override = override * len(client_sizes)
+            if len(override) != len(client_sizes):
+                raise ValueError(
+                    f"--client_p length ({len(override)}) must match number of clients "
+                    f"({len(client_sizes)}) or be a single value"
+                )
+            total_override = sum(override)
+            if total_override == 0:
+                raise ValueError("--client_p values must not all be zero")
+            client_p = [x / total_override for x in override]
+
         # 2) Aggregate LoRA weights and classification heads according to strategy
         print(f"[DEBUG] FL round {round_idx + 1}: Aggregating weights from {len(client_weights)} clients")
         # Default values
@@ -614,7 +642,7 @@ def main() -> None:
             next_num_B = args.num_B
             avg_heads = client_heads[0]
         else:  # Default: FLoRA stacking strategy
-        # Determine new LoRA rank as the sum of per-client ranks
+            # Determine new LoRA rank as the sum of per-client ranks
             client_ranks: List[int] = []
             for cw in client_weights:
                 found = False

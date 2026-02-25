@@ -6,7 +6,7 @@
 # num_fl_rounds: number of federated learning rounds (ignored for centralized)
 # num_B: number of B matrices in the mLoRA adapter
 # epochs: number of training epochs
-
+# p client p variation
 ## Centralized experiments
 #centralized 1 3 1
 #centralized 1 3 2
@@ -29,11 +29,15 @@
 #federated 2 2 2
 #federated 2 2 3
 #federated 3 3 1
-#federated 3 3 2
-#federated 3 3 3
+#federated 3 3 2 
+federated 3 3 3 1.0
+federated 3 3 3 0.05
+federated 3 3 3 0.5
+federated 3 3 3 1.25
+federated 3 3 3 1.5
 #federated 3 2 1
 #federated 3 2 2
-federated 3 2 3
+#federated 3 2 3
 
 ## FEDIT experiments (mirroring federated settings)
 #fedit 1 3 1
@@ -52,7 +56,7 @@ federated 3 2 3
 
 #fedit 3 3 1
 #fedit 3 3 2
-#fedit 3 3 3
+#fedit 3 3 3 
 #fedit 3 2 1
-#fedit 3 2 2
-fedit 3 2 3
+#fedit 3 2 3 
+fedit 3 2 2

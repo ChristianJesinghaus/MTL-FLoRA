@@ -9,6 +9,10 @@
 # positional argument; if omitted, a sensible default under
 # `./outputs_tinyllama_train` will be used.  Additional flags
 # override the default hyperparameters specified below.
+#
+# New: The script forwards any `--client_p` argument (or other overrides)
+# provided on the command line to the underlying Python training script.
+# See the training script (train.py) for details on how `--client_p` is used.
 
 set -euo pipefail
 
@@ -19,6 +23,8 @@ cd "${REPO_DIR}"
 # Parse the first positional argument as the output directory, or set a default.
 OUT_DIR="${1:-./outputs_tinyllama_train}"
 shift || true
+# Remaining arguments override defaults defined below. These may include
+# flags such as --epochs, --num_B, --num_fl_rounds, --strat, --client_p, etc.
 EXTRA_ARGS=("$@")
 
 # Load common helpers from the script folder.  This defines
@@ -28,7 +34,8 @@ source script/common_env.sh
 # Ensure the output directory exists.
 mkdir -p "${OUT_DIR}"
 
-# Python script to be executed inside the container.
+# Python script to be executed inside the container.  We reference our
+# modified training script (train.py) which adds support for --client_p.
 SCRIPT="run_glue_tinyllama_mtl_mlora_train_single_gpu.py"
 
 # Default arguments tuned for a 1080 Ti GPU.  Feel free to override
@@ -64,7 +71,7 @@ ARGS=(
   --save_eval_details
   #--eval_details_max_examples 200
 
-  #Wieder auskommentieren, sobald wieder federated
+  # Default to centralized strategy; can be overridden via EXTRA_ARGS
   --strat centralized
 
   # Federated learning settings
@@ -72,11 +79,10 @@ ARGS=(
   --num_clients 1
   --dirichlet_alpha 10.0
 
-  # Enable test mode by default (override with --no-test in EXTRA_ARGS)
-  #--test
+  # Test mode disabled by default (override with --test in EXTRA_ARGS)
 )
 
-# Append any extra CLI arguments (these overrid defaults if duplicated).
+# Append any extra CLI arguments (these override defaults if duplicated).
 ARGS+=("${EXTRA_ARGS[@]}")
 
 # Construct the Python command to run inside the container.
