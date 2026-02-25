@@ -30,7 +30,7 @@ mkdir -p "${OUT_DIR}"
 # Python evaluation script
 SCRIPT="run_glue_tinyllama_mtl_mlora_eval_single_gpu.py"
 
-# Base arguments (must match training settings for LoRA hyperparameters)
+# Base arguments (must match *global* LoRA hyperparameters for the trained model)
 ARGS=(
   --output_dir "${OUT_DIR}"
   --load_dir "${LOAD_DIR}"
@@ -38,12 +38,18 @@ ARGS=(
   --max_length 256
   --num_workers 2
 
-  --lora_r 32
+  # Final LoRA rank after one FL round with two clients: 8 * 2 = 16
+  --lora_r 16
   --lora_alpha 16
   --lora_dropout 0.05
-  --num_B 3
-  --temperature 0.1
 
+  # Local number of B matrices per client and derived global number of B matrices
+  --num_B 3
+  --global_num_B 6
+  # Softmax block size corresponds to local num_B
+  --block_size 3
+
+  --temperature 0.1
   --fp16
 
   --save_eval_details
