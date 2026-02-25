@@ -76,7 +76,7 @@ ARGS=(
   #--test
 )
 
-# Append any extra CLI arguments (these override defaults if duplicated).
+# Append any extra CLI arguments (these overrid defaults if duplicated).
 ARGS+=("${EXTRA_ARGS[@]}")
 
 # Construct the Python command to run inside the container.

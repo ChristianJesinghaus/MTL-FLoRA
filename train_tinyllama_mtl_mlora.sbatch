@@ -55,7 +55,7 @@ while read -r strat fl_rounds num_B epochs; do
   # federated runs use 2 clients, centralized runs remain at 1.  We
   # explicitly pass this to the training script to override its default.
   clients=1
-  if [[ "${strat}" == "federated" ]]; then
+  if [[ "${strat}" == "federated" || "${strat}" == "fedit" ]]; then
     clients=2
   fi
 
