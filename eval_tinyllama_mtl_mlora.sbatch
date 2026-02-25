@@ -23,7 +23,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=16G
-#SBATCH --time=04:00:00
+#SBATCH --time=0-04:00:00
 
 set -euo pipefail
 
@@ -65,24 +65,36 @@ mkdir -p logs
 
 # Iterate over each line in the parameter file.  Lines beginning with
 # '#' or blank lines are ignored.  Each non-comment line is expected
-# to have four whitespace-separated fields: strat num_fl_rounds num_B
-# epochs.  Only federated experiments are evaluated here.
-while read -r strat rounds num_B epochs; do
+# to have five whitespace-separated fields: strat num_fl_rounds num_B
+# epochs client_p.  If the last field is omitted, a default of 1.0 is assumed.
+while read -r strat rounds num_B epochs client_p; do
   # Skip empty lines and comments.
   [[ -z "${strat}" || "${strat}" =~ ^# ]] && continue
 
-  # Only handle federated runs; centralized runs have no global model
-  # separate from the local one and are therefore not evaluated here.
+  # Only handle federated and FEDIT runs; centralized runs have no
+  # global model separate from the local one and are therefore not
+  # evaluated here.  For FEDIT (where existing adapters are further
+  # trained instead of freezing them), the global rank does not grow
+  # with the number of rounds.
   if [[ "${strat}" != "federated" && "${strat}" != "fedit" ]]; then
     continue
   fi
 
+  # Default client_p to 1.0 if not provided.  Sanitize for use in path names by
+  # replacing decimal points with underscores.  This tag must match the
+  # corresponding suffix used during training so that the evaluation picks up
+  # the correct model directory.  When the parameter file includes a
+  # fifth column, it specifies the client_p value used for training; otherwise
+  # we assume p=1.0 (uniform weighting).
+  client_p=${client_p:-1.0}
+  p_tag=$(echo "${client_p}" | sed 's/\./_/g')
+
   # Build the training and evaluation prefixes.  The training prefix
   # matches the naming used in train_tinyllama_mtl_mlora_auto.sbatch,
-  # while the evaluation prefix replaces "train" with "eval" to
-  # differentiate the outputs.
-  train_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}"
-  eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}"
+  # including the p_tag suffix.  The evaluation prefix mirrors this but
+  # uses "eval" instead of "train" to differentiate outputs.
+  train_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
+  eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
 
   # Determine paths for the model checkpoint to evaluate, the output
   # directory for evaluation results, and the log files capturing
@@ -90,7 +102,7 @@ while read -r strat rounds num_B epochs; do
   # checkpoint to reside in a 'checkpoints' subdirectory inside the
   # training output directory.  If your training script stores the
   # best checkpoint elsewhere, adjust the load_dir accordingly.
-  load_dir="${REPO_ROOT}/outputs/${train_prefix}"
+  load_dir="${REPO_ROOT}/outputs/${train_prefix}/checkpoints/ckpt_best"
   out_dir="${REPO_ROOT}/outputs/${eval_prefix}"
   logfile_out="${REPO_ROOT}/logs/${eval_prefix}.out"
   logfile_err="${REPO_ROOT}/logs/${eval_prefix}.err"
@@ -105,27 +117,23 @@ while read -r strat rounds num_B epochs; do
   echo "Writing evaluation results to ${out_dir}"
   echo "Capturing stdout to ${logfile_out} and stderr to ${logfile_err}"
 
-  # Compute the federated LoRA hyperparameters.  Each federated round
-  # contributes another set of LoRA updates for every client.  Thus the
-  # global rank grows with both the number of clients and the number
-  # of rounds: global_r = LOCAL_R * NUM_CLIENTS * rounds.  Likewise,
-  # global_num_B = num_B * NUM_CLIENTS * rounds.  The block size
-  # remains equal to the local number of B matrices.
+  # Compute the global LoRA hyperparameters.  For standard federated
+  # runs, each round introduces a new set of LoRA weights per client,
+  # so the global rank and number of B matrices grow linearly with
+  # rounds (LOCAL_R * NUM_CLIENTS * rounds).  In FEDIT, all LoRA
+  # adapters are jointly trained across rounds, so the rank does not
+  # accumulate across rounds – it stays LOCAL_R * NUM_CLIENTS.  In
+  # both cases the block size equals the local B count.
   local_B="${num_B}"
-  
   if [[ "${strat}" == "federated" ]]; then
-      # lineares Stacking: pro Runde ein neuer Adapter pro Client
-      global_r=$((LOCAL_R * NUM_CLIENTS**rounds))
-      global_B=$((num_B * NUM_CLIENTS**rounds))
-  elif [[ "${strat}" == "fedit" ]]; then
-      # FedIT: keine Stacking-Vergrößerung – global = lokal
-      global_r="${LOCAL_R}"
-      global_B="${num_B}"
+    global_r=$((LOCAL_R * NUM_CLIENTS * rounds))
+    global_B=$((num_B * NUM_CLIENTS * rounds))
   else
-      continue
+    # FEDIT case
+    global_r=$((LOCAL_R * NUM_CLIENTS))
+    global_B=$((num_B * NUM_CLIENTS))
   fi
   block_size="${num_B}"
-
 
   # Ensure the evaluation output directory exists.
   mkdir -p "${out_dir}"
