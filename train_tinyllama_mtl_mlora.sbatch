@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=24G
-#SBATCH --time=05:00:00
+#SBATCH --time=08:00:00
 
 #
 # SLURM batch script to run multiple TinyLlama mLoRA training experiments
@@ -76,9 +76,9 @@ while read -r strat fl_rounds num_B epochs client_p; do
   # Derive a unique experiment prefix based on the current parameters.  Include
   # the p_tag to distinguish runs with different client_p values.
   exp_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${fl_rounds}_numB${num_B}_p${p_tag}"
-  outdir="outputs/${exp_prefix}_lora8" 
-  logfile_out="logs/${exp_prefix}_lora8.out"
-  logfile_err="logs/${exp_prefix}_lora8.err"
+  outdir="outputs/${exp_prefix}_newclienP" 
+  logfile_out="logs/${exp_prefix}_newclienP.out"
+  logfile_err="logs/${exp_prefix}_newclienP.err"
 
   # Create the experiment output directory and log files directories.
   mkdir -p "${outdir}" logs

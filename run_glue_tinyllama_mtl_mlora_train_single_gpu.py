@@ -4,15 +4,16 @@ Modified TinyLlama mLoRA training script supporting a manual client_p override.
 
 This script extends the original FL training script by adding a new command line
 option ``--client_p`` which allows the user to override the automatic weighting
-of clients during federated averaging.  Normally the training loop computes
-``client_p`` from the relative data sizes of each client.  When the new
-argument is provided, it may contain either a single float (which will be
-applied to all clients) or one weight per client.  The values are
-normalised to sum to one before being used.
+of clients during federated aggregation.
+
+IMPORTANT CHANGE (as requested):
+- The values passed via ``--client_p`` are used AS-IS (NO normalization).
+  If you pass ``--client_p 1.0`` and you have 2 clients, then BOTH clients
+  will get a weight of 1.0 (not 0.5 / 0.5).
 
 Usage:
-    python3 train.py --client_p 1.0    # equal weighting for all clients
-    python3 train.py --client_p 0.8 0.2  # explicit weighting for two clients
+    python3 train.py --client_p 1.0         # each client gets weight 1.0
+    python3 train.py --client_p 0.8 0.2     # explicit weights for two clients
 
 All other behaviour matches the original script.  See below for details.
 """
@@ -72,7 +73,7 @@ def fed_avg(client_weights: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Te
     """Average LoRA weight dictionaries across clients (simple mean).
 
     Args:
-        client_weights: List of per‑client parameter dictionaries.  Each
+        client_weights: List of per-client parameter dictionaries.  Each
             dictionary must have identical keys with tensors of the same shape.
 
     Returns:
@@ -91,22 +92,21 @@ def fed_avg(client_weights: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Te
 
 
 def fed_avg_heads(client_heads: List[Dict[str, torch.Tensor]], client_p: List[float]) -> Dict[str, torch.Tensor]:
-    """Weighted average of classification head parameters across clients.
+    """Weighted aggregation of classification head parameters across clients.
 
-    Unlike ``fed_avg`` which performs an unweighted mean, this function
-    computes a weighted average according to ``client_p``.  The weights
-    ``client_p[k]`` should sum to one and typically reflect the relative
-    dataset size of each client.  The keys of the returned dictionary match
-    exactly the keys from the client head dictionaries (e.g. ``heads.task.weight``
-    and ``heads.task.bias``).
+    NOTE:
+    - This function computes a WEIGHTED SUM using the given ``client_p`` values.
+    - No normalization is performed inside this function.
+    - If you want a "true weighted average", you must provide weights that already
+      sum to 1 (or normalize externally).
 
     Args:
-        client_heads: List of per‑client head parameter dictionaries.
-        client_p: List of floats of the same length as ``client_heads`` summing
-            to one.  Each entry gives the weight of the corresponding client.
+        client_heads: List of per-client head parameter dictionaries.
+        client_p: List of floats of the same length as ``client_heads``.
+            Values are used as-is (not required to sum to 1).
 
     Returns:
-        A dictionary mapping each head parameter name to its weighted average.
+        A dictionary mapping each head parameter name to its weighted sum.
     """
     if not client_heads:
         raise ValueError("fed_avg_heads: No client head weights provided")
@@ -116,10 +116,8 @@ def fed_avg_heads(client_heads: List[Dict[str, torch.Tensor]], client_p: List[fl
     # Initialise average dict with zeros on the CPU
     avg: Dict[str, torch.Tensor] = {}
     for name in client_heads[0]:
-        # Start with zero tensor of the same shape and dtype
         tensor_shape = client_heads[0][name].shape
         dtype = client_heads[0][name].dtype
-        device = client_heads[0][name].device
         weighted_sum = torch.zeros(tensor_shape, dtype=dtype)
         for i in range(num_clients):
             weighted_sum += client_p[i] * client_heads[i][name].to(dtype=dtype)
@@ -152,7 +150,7 @@ def stack_B(client_B: List[Dict[str, torch.Tensor]], num_B: int, hidden: int, lo
     tensor of shape ``(num_B, hidden, lora_r)`` where ``num_B`` is the
     global number of B matrices (num_B_local * num_clients) and ``lora_r``
     is the sum of per-client ranks.  Each client's B matrices are placed
-    contiguously in the output along both dimensions to prevent cross‑term
+    contiguously in the output along both dimensions to prevent cross-term
     interactions during aggregation.
     """
     num_clients = len(client_B)
@@ -186,7 +184,7 @@ def stack_B(client_B: List[Dict[str, torch.Tensor]], num_B: int, hidden: int, lo
 
 
 def stack_lambdas(client_lambdas: List[Dict[str, torch.Tensor]], num_tasks: int, lora_r: int) -> Dict[str, torch.Tensor]:
-    """Stack Lambda matrices from clients into a block‑diagonal tensor."""
+    """Stack Lambda matrices from clients into a block-diagonal tensor."""
     device = next(iter(client_lambdas[0].values())).device
     dtype = next(iter(client_lambdas[0].values())).dtype
     num_clients = len(client_lambdas)
@@ -224,7 +222,7 @@ def aggregate_mtl_weights(
     num_tasks: int,
     lora_r: int,
 ) -> Dict[str, torch.Tensor]:
-    """Aggregate per‑client LoRA weights for FLoRA by stacking and concatenation."""
+    """Aggregate per-client LoRA weights for FLoRA by stacking and concatenation."""
     client_A: List[Dict[str, torch.Tensor]] = []
     client_B: List[Dict[str, torch.Tensor]] = []
     client_lambdas: List[Dict[str, torch.Tensor]] = []
@@ -243,7 +241,7 @@ def aggregate_mtl_weights(
 
 
 def update_global_model(global_model: torch.nn.Module, avg_weights: Dict[str, torch.Tensor]) -> None:
-    """Copy aggregated LoRA weights into the global model (in‑place)."""
+    """Copy aggregated LoRA weights into the global model (in-place)."""
     with torch.no_grad():
         for name, param in global_model.named_parameters():
             if name in avg_weights:
@@ -255,7 +253,7 @@ def update_global_model(global_model: torch.nn.Module, avg_weights: Dict[str, to
 
 
 def update_head_params(global_model: torch.nn.Module, avg_heads: Dict[str, torch.Tensor]) -> None:
-    """Copy aggregated head weights into the global model (in‑place)."""
+    """Copy aggregated head weights into the global model (in-place)."""
     if not avg_heads:
         return
     with torch.no_grad():
@@ -273,7 +271,7 @@ def transfer_non_lora_params(
     new_model: torch.nn.Module,
     round_num: int | None = None,
 ) -> int:
-    """Transfer non‑LoRA parameters from the old model to the new model."""
+    """Transfer non-LoRA parameters from the old model to the new model."""
     old_state_dict = old_model.state_dict()
     new_state_dict = new_model.state_dict()
     params_transferred = 0
@@ -290,14 +288,14 @@ def transfer_non_lora_params(
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Train TinyLlama + mLoRA on multi‑task GLUE (single GPU)")
+    p = argparse.ArgumentParser(description="Train TinyLlama + mLoRA on multi-task GLUE (single GPU)")
 
     # Model / output
     p.add_argument(
         "--model_name",
         type=str,
         default="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
-        help="Name of the TinyLlama model to fine‑tune",
+        help="Name of the TinyLlama model to fine-tune",
     )
     p.add_argument(
         "--output_dir",
@@ -307,7 +305,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
 
-    # Training hyperparameters (defaults tuned for 1080 Ti)
+    # Training hyperparameters (defaults tuned for 1080 Ti)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--train_batch_size", type=int, default=2)
     p.add_argument("--eval_batch_size", type=int, default=16)
@@ -374,7 +372,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--save_eval_details",
         action="store_true",
-        help="Write per‑example JSONL with evaluation details",
+        help="Write per-example JSONL with evaluation details",
     )
     p.add_argument(
         "--eval_details_max_examples",
@@ -408,7 +406,7 @@ def parse_args() -> argparse.Namespace:
         "--dirichlet_alpha",
         type=float,
         default=1.0,
-        help="Dirichlet alpha for non‑IID data split (lower = more heterogeneous)",
+        help="Dirichlet alpha for non-IID data split (lower = more heterogeneous)",
     )
     p.add_argument(
         "--strat",
@@ -417,7 +415,7 @@ def parse_args() -> argparse.Namespace:
         help="Federated aggregation strategy: 'FLoRA', 'fedit' or 'centralized'",
     )
 
-    # New: Override client weights in federated averaging
+    # New: Override client weights in federated aggregation (NO normalization!)
     p.add_argument(
         "--client_p",
         type=float,
@@ -425,7 +423,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help=(
             "Optional override for client_p weighting. Provide one value to apply uniformly "
-            "to all clients, or a value for each client. The values will be normalised to sum to 1."
+            "to all clients, or a value for each client. Values are used AS-IS (no normalization)."
         ),
     )
 
@@ -446,7 +444,7 @@ def fine_tune_client(
     args: argparse.Namespace,
     use_amp: bool = False,
 ) -> Dict[str, torch.Tensor]:
-    """Fine‑tune a model on a single client's data and return LoRA weights.
+    """Fine-tune a model on a single client's data and return LoRA weights.
 
     This function delegates to ``train_loop.train`` to perform the optimisation.
     After training it extracts and returns all parameters whose names contain
@@ -543,7 +541,7 @@ def main() -> None:
     print(f"[INFO] train_bias={train_bias} train_layernorm={train_ln}")
 
     # Build data loaders.  We reuse the RoBERTa data loader implementation
-    # because it is model‑agnostic: it uses the provided tokenizer and
+    # because it is model-agnostic: it uses the provided tokenizer and
     # simply tokenizes the raw GLUE datasets.
     task_data = build_dataloaders(
         tokenizer,
@@ -574,7 +572,7 @@ def main() -> None:
         client_weights: List[Dict[str, torch.Tensor]] = []
         client_heads: List[Dict[str, torch.Tensor]] = []
         for client_id in range(args.num_clients):
-            print(f"[INFO] Fine‑tuning client {client_id + 1}/{args.num_clients}")
+            print(f"[INFO] Fine-tuning client {client_id + 1}/{args.num_clients}")
             # Copy the current global model to avoid parameter sharing
             client_model = copy.deepcopy(global_model)
             client_data_dict = task_data[client_id]
@@ -607,9 +605,11 @@ def main() -> None:
         else:
             client_p = [1.0 / len(client_sizes)] * len(client_sizes)
 
-        # Override client_p if provided
+        # Override client_p if provided (NO normalization!)
         if args.client_p is not None:
             override = list(args.client_p)
+            if len(override) == 0:
+                raise ValueError("--client_p was provided but no values were given")
             # If only one value is given, replicate it for all clients
             if len(override) == 1:
                 override = override * len(client_sizes)
@@ -618,10 +618,9 @@ def main() -> None:
                     f"--client_p length ({len(override)}) must match number of clients "
                     f"({len(client_sizes)}) or be a single value"
                 )
-            total_override = sum(override)
-            if total_override == 0:
+            if all(x == 0 for x in override):
                 raise ValueError("--client_p values must not all be zero")
-            client_p = [x / total_override for x in override]
+            client_p = override  # <-- IMPORTANT: no normalization
 
         # 2) Aggregate LoRA weights and classification heads according to strategy
         print(f"[DEBUG] FL round {round_idx + 1}: Aggregating weights from {len(client_weights)} clients")
@@ -634,7 +633,7 @@ def main() -> None:
             # Simple FedAvg across LoRA weights (unweighted mean)
             avg_weights = fed_avg(client_weights)
             next_num_B = args.num_B
-            # Heads are averaged using client_p
+            # Heads are aggregated using client_p (as-is)
             avg_heads = fed_avg_heads(client_heads, client_p)
         elif args.strat == "centralized":
             # Centralized learning: no averaging; simply pick the first client
@@ -674,7 +673,7 @@ def main() -> None:
             flora_r = new_flora_r
             flora_B = global_num_B
             next_num_B = flora_B
-            # Heads are averaged using client_p
+            # Heads are aggregated using client_p (as-is)
             avg_heads = fed_avg_heads(client_heads, client_p)
 
         # 3) Create a new global model with potentially expanded rank and B dimension
@@ -695,7 +694,7 @@ def main() -> None:
                 if isinstance(module, _mLoRALinear):
                     module.block_size = args.num_B
 
-        # Transfer non‑LoRA parameters (including initial heads) from the old model to the new model
+        # Transfer non-LoRA parameters (including initial heads) from the old model to the new model
         transfer_non_lora_params(global_model, new_global_model, round_num=round_idx + 1)
         # Update the new model with the aggregated LoRA weights
         print(f"[DEBUG] FL round {round_idx + 1}: Updating global model with aggregated LoRA weights")
@@ -714,8 +713,8 @@ def main() -> None:
     # Save final global model and adapter/head weights
     #
     # After completing all FL rounds, `global_model` holds the aggregated LoRA
-    # weights with an expanded rank equal to `flora_r` and the averaged heads.
-    # By default the training loop only saves checkpoints during local fine‑tuning,
+    # weights with an expanded rank equal to `flora_r` and the aggregated heads.
+    # By default the training loop only saves checkpoints during local fine-tuning,
     # which means the final aggregated state is not persisted.  To enable true
     # evaluation of the global model, we explicitly save both a full
     # checkpoint (for potential resumption) and the lightweight adapter/head

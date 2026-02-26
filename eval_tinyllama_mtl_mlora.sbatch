@@ -96,8 +96,8 @@ while read -r strat rounds num_B epochs client_p; do
   # matches the naming used in train_tinyllama_mtl_mlora_auto.sbatch,
   # including the p_tag suffix.  The evaluation prefix mirrors this but
   # uses "eval" instead of "train" to differentiate outputs.
-  train_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
-  eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
+  train_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}_newclienP"
+  eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}_newclienP"
 
   # Training directory and the global final checkpoint to evaluate.
   train_dir="${REPO_ROOT}/outputs/${train_prefix}"

@@ -39,10 +39,13 @@
 #federated 3 3 2 0.01
 #federated 3 3 2 0.001
 
+federated 3 3 2 0.001
+federated 3 3 3 0.01
+federated 3 3 3 0.001
 
 #federated 3 3 3 1.0
 #federated 3 3 3 0.05
-federated 3 3 3 0.5
+#federated 3 3 3 0.5
 #federated 3 3 3 1.25
 #federated 3 3 3 1.5
 #federated 3 3 3 0.01
@@ -71,4 +74,6 @@ federated 3 3 3 0.5
 #fedit 3 3 3 
 #fedit 3 2 1
 #fedit 3 2 3 
-fedit 3 2 2
+#federated 3 3 2 0.01
+#federated 3 3 3 0.01
+fedit 1 1 1
