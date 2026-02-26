@@ -9,7 +9,7 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=24G
-#SBATCH --time=48:00:00
+#SBATCH --time=14:00:00
 
 #
 # SLURM batch script to run multiple TinyLlama mLoRA training experiments
