@@ -9,10 +9,13 @@
 ## prefix, derives the matching evaluation prefix (using "eval" in
 ## place of "train"), computes the global LoRA hyperparameters based
 ## on the local settings and number of clients, and then invokes the
-## existing evaluation shell script (`eval_tinyllama_mtl_mlora.sh`).  The
-## evaluation outputs and logs are stored in directories and files
-## whose names mirror those used during training, suffixed with
-## "eval" for clarity.
+## existing evaluation shell script (`eval_tinyllama_mtl_mlora.sh`).
+##
+## IMPORTANT CHANGE:
+## - We now explicitly evaluate the *last global aggregated checkpoint*:
+##   <train_dir>/checkpoints/ckpt_global_final.pt
+## - We pass it via --load_ckpt, so the Python eval script does not try
+##   to resolve adapter/head state files from a wrong directory.
 
 #SBATCH --job-name=tinyllama_mtl_eval_auto
 #SBATCH --output=logs/tinyllama_mtl_eval_auto_%j.out
@@ -96,38 +99,39 @@ while read -r strat rounds num_B epochs client_p; do
   train_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
   eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
 
-  # Determine paths for the model checkpoint to evaluate, the output
-  # directory for evaluation results, and the log files capturing
-  # stdout and stderr.  The evaluation script expects the global
-  # checkpoint to reside in a 'checkpoints' subdirectory inside the
-  # training output directory.  If your training script stores the
-  # best checkpoint elsewhere, adjust the load_dir accordingly.
-  load_dir="${REPO_ROOT}/outputs/${train_prefix}/checkpoints/ckpt_best"
+  # Training directory and the global final checkpoint to evaluate.
+  train_dir="${REPO_ROOT}/outputs/${train_prefix}"
+  load_ckpt="${train_dir}/checkpoints/ckpt_global_final.pt"
+
+  # Evaluation output and logs.
   out_dir="${REPO_ROOT}/outputs/${eval_prefix}"
   logfile_out="${REPO_ROOT}/logs/${eval_prefix}.out"
   logfile_err="${REPO_ROOT}/logs/${eval_prefix}.err"
 
-  # Report progress on the job's stderr/stdout.  These messages
-  # provide a high-level overview of what the script is doing but do
-  # not include the full evaluation output, which goes to the
-  # per-run log files.
+  # Skip if training directory/checkpoint is missing (so one missing run
+  # doesn't kill the whole batch).
+  if [[ ! -d "${train_dir}" ]]; then
+    echo "[WARN] Training directory not found: ${train_dir} (skipping)" >&2
+    continue
+  fi
+  if [[ ! -f "${load_ckpt}" ]]; then
+    echo "[WARN] Global final checkpoint not found: ${load_ckpt} (skipping)" >&2
+    continue
+  fi
+
   echo "------------------------------------------"
   echo "Evaluating ${train_prefix} -> ${eval_prefix}"
-  echo "Loading model from ${load_dir}"
+  echo "Training dir: ${train_dir}"
+  echo "Loading global checkpoint: ${load_ckpt}"
   echo "Writing evaluation results to ${out_dir}"
   echo "Capturing stdout to ${logfile_out} and stderr to ${logfile_err}"
 
-  # Compute the global LoRA hyperparameters.  For standard federated
-  # runs, each round introduces a new set of LoRA weights per client,
-  # so the global rank and number of B matrices grow linearly with
-  # rounds (LOCAL_R * NUM_CLIENTS * rounds).  In FEDIT, all LoRA
-  # adapters are jointly trained across rounds, so the rank does not
-  # accumulate across rounds – it stays LOCAL_R * NUM_CLIENTS.  In
-  # both cases the block size equals the local B count.
+  # Compute the global LoRA hyperparameters.
+  # (Kept exactly as in your current script to preserve current settings.)
   local_B="${num_B}"
   if [[ "${strat}" == "federated" ]]; then
-    global_r=$((LOCAL_R * NUM_CLIENTS * rounds))
-    global_B=$((num_B * NUM_CLIENTS * rounds))
+    global_r=$((LOCAL_R * NUM_CLIENTS**rounds))
+    global_B=$((num_B * NUM_CLIENTS**rounds))
   else
     # FEDIT case
     global_r=$((LOCAL_R * NUM_CLIENTS))
@@ -135,15 +139,12 @@ while read -r strat rounds num_B epochs client_p; do
   fi
   block_size="${num_B}"
 
-  # Ensure the evaluation output directory exists.
   mkdir -p "${out_dir}"
 
-  # Launch the evaluation script.  We explicitly pass the computed
-  # hyperparameters so that the evaluation uses the correct global
-  # settings.  The evaluation output and errors are redirected to the
-  # per-run log files for later inspection.  Additional flags can
-  # easily be appended here.
-  bash eval_tinyllama_mtl_mlora.sh "${load_dir}" "${out_dir}" \
+  # Launch evaluation: pass train_dir as --load_dir (harmless) AND force the
+  # actual model load from the global final checkpoint via --load_ckpt.
+  bash eval_tinyllama_mtl_mlora.sh "${train_dir}" "${out_dir}" \
+    --load_ckpt "${load_ckpt}" \
     --lora_r "${global_r}" \
     --lora_alpha "${LORA_ALPHA}" \
     --num_B "${local_B}" \

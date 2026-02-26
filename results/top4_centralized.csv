@@ -1,0 +1,5 @@
+strategy,epochs,flrounds,num_B,glue_avg,file
+centralized,1,1,2,0.8663,tinyllama_train_centralized_epoch1_flround1_numB2.out
+centralized,2,1,2,0.865,tinyllama_train_centralized_epoch2_flround1_numB2.out
+centralized,3,1,3,0.8589,tinyllama_train_centralized_epoch3_flround1_numB3.out
+centralized,2,1,3,0.8583,tinyllama_train_centralized_epoch2_flround1_numB3.out

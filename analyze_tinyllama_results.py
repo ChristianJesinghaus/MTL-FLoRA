@@ -26,7 +26,6 @@ The script writes three CSV files into the current working directory:
     - top4_centralized.csv: top 4 centralized runs
     - top4_federated.csv: top 4 federated runs
     - top4_fedit.csv: top 4 fedit runs
-
 """
 
 import re
@@ -36,35 +35,38 @@ from typing import Optional, List, Dict
 
 
 def extract_glue_avg(file_path: Path) -> Optional[float]:
-    """Return the last GLUE average score from a log file, if present.
-
-    Parameters
-    ----------
-    file_path : Path
-        Path to the log file to parse.
-
-    Returns
-    -------
-    Optional[float]
-        The GLUE average score (as a float) rounded to 4 decimal places,
-        or None if not found.
     """
-    glue_val = None
-    # Regex to capture the "avg" value in a line like:
-    #   "glue_avg": { "avg": 0.8270597229717576 }
-    pattern = re.compile(r'"glue_avg"\s*:\s*\{\s*"avg"\s*:\s*([0-9\.]+)')
+    Return the last GLUE average score from a log file, if present.
+
+    FIX: The original implementation parsed line-by-line with a regex that
+    required "glue_avg" and "avg" on the same line. Your logs print JSON
+    multi-line, e.g.:
+
+        "glue_avg": {
+          "avg": 0.86145
+        }
+
+    So we read the whole file and use a DOTALL regex.
+    Also supports scientific notation.
+    """
     try:
-        with file_path.open('r', encoding='utf-8', errors='ignore') as f:
-            for line in f:
-                match = pattern.search(line)
-                if match:
-                    try:
-                        glue_val = float(match.group(1))
-                    except ValueError:
-                        continue
+        text = file_path.read_text(encoding="utf-8", errors="ignore")
     except FileNotFoundError:
         return None
-    return round(glue_val, 4) if glue_val is not None else None
+
+    # Match glue_avg block and capture avg, allowing newlines and scientific notation
+    m = re.search(
+        r'"glue_avg"\s*:\s*\{.*?"avg"\s*:\s*([0-9]+(?:\.[0-9]+)?(?:[eE][-+]?[0-9]+)?)',
+        text,
+        flags=re.DOTALL,
+    )
+    if not m:
+        return None
+
+    try:
+        return round(float(m.group(1)), 4)
+    except ValueError:
+        return None
 
 
 def parse_filename(file_name: str) -> Optional[Dict[str, str]]:
@@ -100,61 +102,43 @@ def parse_filename(file_name: str) -> Optional[Dict[str, str]]:
 
 
 def collect_results(logs_dir: Path) -> List[Dict[str, str]]:
-    """Collect GLUE averages from all relevant log files.
+    """Collect GLUE averages from all relevant log files."""
+    results: List[Dict[str, str]] = []
 
-    Parameters
-    ----------
-    logs_dir : Path
-        Directory containing the .out log files.
-
-    Returns
-    -------
-    List[Dict[str, str]]
-        A list of dicts, each representing a run with parameters and glue_avg.
-    """
-    results = []
     for file_path in logs_dir.glob('tinyllama_*.out'):
         meta = parse_filename(file_path.name)
         if not meta:
             # skip files that do not match expected patterns
             continue
+
         # Determine which logs to process:
         # For centralized strategy, only training logs contain final evaluation.
         # For federated and fedit strategies, only evaluation logs are considered.
         if meta['strat'] == 'centralized':
             if meta['type'] != 'train':
-                # skip evaluation logs for centralized, if any
                 continue
         else:
-            # Only process evaluation logs for federated and fedit
             if meta['type'] != 'eval':
                 continue
+
         glue = extract_glue_avg(file_path)
         if glue is None:
-            # Skip runs without glue_avg found
             continue
-        result = {
+
+        results.append({
             'strategy': meta['strat'],
             'epochs': int(meta['epochs']),
             'flrounds': int(meta['flrounds']),
             'num_B': int(meta['num_B']),
             'glue_avg': glue,
             'file': str(file_path.relative_to(logs_dir)),
-        }
-        results.append(result)
+        })
+
     return results
 
 
 def write_results(results: List[Dict[str, str]], output_path: Path) -> None:
-    """Write all results to a CSV file.
-
-    Parameters
-    ----------
-    results : list of dict
-        The run results.
-    output_path : Path
-        Path to the output CSV file.
-    """
+    """Write all results to a CSV file."""
     fieldnames = ['strategy', 'epochs', 'flrounds', 'num_B', 'glue_avg', 'file']
     with output_path.open('w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -164,25 +148,11 @@ def write_results(results: List[Dict[str, str]], output_path: Path) -> None:
 
 
 def write_top_results(results: List[Dict[str, str]], strategy: str, top_n: int, output_path: Path) -> None:
-    """Write the top N results for a given strategy to a CSV file.
-
-    Parameters
-    ----------
-    results : list of dict
-        All run results.
-    strategy : str
-        Strategy to filter on ('centralized', 'federated', 'fedit').
-    top_n : int
-        Number of top results to write.
-    output_path : Path
-        Path to the output CSV file.
-    """
-    # Filter by strategy
+    """Write the top N results for a given strategy to a CSV file."""
     filtered = [r for r in results if r['strategy'] == strategy]
-    # Sort by glue_avg descending
     filtered.sort(key=lambda x: x['glue_avg'], reverse=True)
-    # Take top N
     top_results = filtered[:top_n]
+
     fieldnames = ['strategy', 'epochs', 'flrounds', 'num_B', 'glue_avg', 'file']
     with output_path.open('w', newline='', encoding='utf-8') as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
@@ -192,26 +162,21 @@ def write_top_results(results: List[Dict[str, str]], strategy: str, top_n: int, 
 
 
 def main() -> None:
-    logs_dir = Path('logs')
+    logs_dir = Path('logs/')
     if not logs_dir.is_dir():
         raise RuntimeError(
             f"Logs directory '{logs_dir}' does not exist. Ensure you're running from the project root."
         )
 
-    # Ergebnisse aus den Logfiles sammeln
     results = collect_results(logs_dir)
     if not results:
-        print("No results found. Ensure log files are present in 'logs' directory.")
+        print("No results found. Ensure log files are present and contain a 'glue_avg' -> 'avg' metric.")
         return
 
-    # Unterordner für die Ausgabedateien festlegen
     output_dir = Path('results')
-    output_dir.mkdir(exist_ok=True)  # Ordner anlegen, falls er nicht existiert
+    output_dir.mkdir(exist_ok=True)
 
-    # Alle Ergebnisse speichern
     write_results(results, output_dir / 'results_all.csv')
-
-    # Top 4 für jede Strategie speichern
     write_top_results(results, 'centralized', 4, output_dir / 'top4_centralized.csv')
     write_top_results(results, 'federated', 4, output_dir / 'top4_federated.csv')
     write_top_results(results, 'fedit', 4, output_dir / 'top4_fedit.csv')
