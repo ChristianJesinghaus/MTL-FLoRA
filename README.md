@@ -2,7 +2,7 @@
 for Multi-Task Learning </h1> 
 
 <h5 align="center"><em>Joshua Heitbreder*, Christian Jesinghaus*, Julia Köpp*</em>
-</br>(*Equal Contribution)</h5>
+</br>
 
 ## Introduction
 We present MTL-FLoRA, a federated extension of MTL-
