@@ -1,6 +1,6 @@
 # Parameter combinations for TinyLlama mLoRA training.
 # Each line (excluding comments and blank lines) has the form:
-#   strat num_fl_rounds num_B epochs
+#   strat num_fl_rounds num_B epochs client_p dirichlet_alpha 
 #
 # strat: 'centralized' or 'federated'
 # num_fl_rounds: number of federated learning rounds (ignored for centralized)

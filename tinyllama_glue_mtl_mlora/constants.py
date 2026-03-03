@@ -13,9 +13,7 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-# -----------------------------
 # GLUE task metadata
-# -----------------------------
 
 # A subset of GLUE tasks used in this project.  Additional tasks can
 # be uncommented if desired; ensure that the corresponding datasets
