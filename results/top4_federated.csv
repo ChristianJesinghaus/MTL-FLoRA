@@ -1,5 +1,0 @@
-strategy,epochs,flrounds,num_B,glue_avg,file
-federated,2,3,3,0.8621,tinyllama_eval_federated_epoch2_flround3_numB3.out
-federated,3,3,3,0.8615,tinyllama_eval_federated_epoch3_flround3_numB3.out
-federated,3,2,3,0.8561,tinyllama_eval_federated_epoch3_flround2_numB3.out
-federated,3,2,2,0.8481,tinyllama_eval_federated_epoch3_flround2_numB2.out

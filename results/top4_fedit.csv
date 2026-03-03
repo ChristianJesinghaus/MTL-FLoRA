@@ -1,5 +1,0 @@
-strategy,epochs,flrounds,num_B,glue_avg,file
-fedit,2,3,2,0.8949,tinyllama_eval_fedit_epoch2_flround3_numB2.out
-fedit,3,2,2,0.8938,tinyllama_eval_fedit_epoch3_flround2_numB2.out
-fedit,2,2,3,0.8919,tinyllama_eval_fedit_epoch2_flround2_numB3.out
-fedit,3,3,3,0.8907,tinyllama_eval_fedit_epoch3_flround3_numB3.out

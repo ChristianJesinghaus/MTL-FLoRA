@@ -2,20 +2,6 @@
 """
 Modified TinyLlama mLoRA training script supporting a manual client_p override.
 
-This script extends the original FL training script by adding a new command line
-option ``--client_p`` which allows the user to override the automatic weighting
-of clients during federated aggregation.
-
-IMPORTANT CHANGE (as requested):
-- The values passed via ``--client_p`` are used AS-IS (NO normalization).
-  If you pass ``--client_p 1.0`` and you have 2 clients, then BOTH clients
-  will get a weight of 1.0 (not 0.5 / 0.5).
-
-Usage:
-    python3 train.py --client_p 1.0         # each client gets weight 1.0
-    python3 train.py --client_p 0.8 0.2     # explicit weights for two clients
-
-All other behaviour matches the original script.  See below for details.
 """
 
 from __future__ import annotations
@@ -65,9 +51,7 @@ try:
 except Exception:
     _mLoRALinear = None  # type: ignore
 
-###############################################################################
 # Federated Averaging helper functions
-###############################################################################
 
 def fed_avg(client_weights: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     """Average LoRA weight dictionaries across clients (simple mean).
@@ -94,12 +78,6 @@ def fed_avg(client_weights: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Te
 def fed_avg_heads(client_heads: List[Dict[str, torch.Tensor]], client_p: List[float]) -> Dict[str, torch.Tensor]:
     """Weighted aggregation of classification head parameters across clients.
 
-    NOTE:
-    - This function computes a WEIGHTED SUM using the given ``client_p`` values.
-    - No normalization is performed inside this function.
-    - If you want a "true weighted average", you must provide weights that already
-      sum to 1 (or normalize externally).
-
     Args:
         client_heads: List of per-client head parameter dictionaries.
         client_p: List of floats of the same length as ``client_heads``.
@@ -125,9 +103,7 @@ def fed_avg_heads(client_heads: List[Dict[str, torch.Tensor]], client_p: List[fl
     return avg
 
 
-###############################################################################
 # Federated stacking and averaging functions for LoRA adapters
-###############################################################################
 
 def stack_A(client_A: List[Dict[str, torch.Tensor]], client_p: List[float], hidden: int, lora_r: int) -> Dict[str, torch.Tensor]:
     """Stack A matrices from clients along the LoRA rank dimension with weighting."""
@@ -305,7 +281,7 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
 
-    # Training hyperparameters (defaults tuned for 1080 Ti)
+    # Training hyperparameters (defaults tuned for 1080 Ti - which sucks)
     p.add_argument("--epochs", type=int, default=1)
     p.add_argument("--train_batch_size", type=int, default=2)
     p.add_argument("--eval_batch_size", type=int, default=16)
@@ -415,7 +391,7 @@ def parse_args() -> argparse.Namespace:
         help="Federated aggregation strategy: 'FLoRA', 'fedit' or 'centralized'",
     )
 
-    # New: Override client weights in federated aggregation (NO normalization!)
+    # Override client weights in federated aggregation (NO normalization!)
     p.add_argument(
         "--client_p",
         type=float,

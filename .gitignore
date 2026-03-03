@@ -186,3 +186,24 @@ cython_debug/
 outputs/
 logs/
 script/
+
+
+
+# Run artifacts
+outputs/
+outputs_tinyllama_train/
+results/
+logs/
+paper_outputs/
+paper_outputs_freezeR/
+
+# Data & binaries
+*.sif
+*.csv
+commonsense_170k_taskid.json
+
+# Checkpoints
+*.bin
+*.pt
+*.safetensors
+checkpoints/

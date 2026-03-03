@@ -10,9 +10,7 @@
 # `./outputs_tinyllama_train` will be used.  Additional flags
 # override the default hyperparameters specified below.
 #
-# New: The script forwards any `--client_p` argument (or other overrides)
-# provided on the command line to the underlying Python training script.
-# See the training script (train.py) for details on how `--client_p` is used.
+
 
 set -euo pipefail
 
@@ -34,8 +32,7 @@ source script/common_env.sh
 # Ensure the output directory exists.
 mkdir -p "${OUT_DIR}"
 
-# Python script to be executed inside the container.  We reference our
-# modified training script (train.py) which adds support for --client_p.
+# Python script to be executed inside the container.  
 SCRIPT="run_glue_tinyllama_mtl_mlora_train_single_gpu.py"
 
 # Default arguments tuned for a 1080 Ti GPU.  Feel free to override

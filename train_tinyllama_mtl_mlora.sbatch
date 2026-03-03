@@ -9,22 +9,27 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --gres=gpu:1
 #SBATCH --mem=24G
-#SBATCH --time=08:00:00
+#SBATCH --time=10:00:00
 
 #
 # SLURM batch script to run multiple TinyLlama mLoRA training experiments
-# sequentially within a single job.  Parameter combinations are read from
-# a text file (param_combinations.txt).  For each line in the file, the
-# training launcher script (train_tinyllama_mtl_mlora.sh) is invoked with
-# overridden hyperparameters.  Output directories and log files are
-# named dynamically based on the current combination.
+# sequentially within a single job.
 #
-# The expected format of each non‑comment, non‑empty line in
-# param_combinations.txt is:
-#   strat num_fl_rounds num_B epochs
-# For example:
+# Parameter combinations are read from a text file (param_combinations.txt).
+# For each line in the file, the training launcher script
+# (train_tinyllama_mtl_mlora.sh) is invoked with overridden hyperparameters.
+#
+# Expected format of each non-comment, non-empty line in param_combinations.txt:
+#   strat num_fl_rounds num_B epochs [client_p] [dirichlet_alpha]
+#
+# Examples:
 #   centralized 1 3 2
-#   federated 2 2 3
+#   federated   3 3 2 0.05 10.0
+#
+# Notes:
+# - client_p defaults to 1.0 if omitted
+# - dirichlet_alpha defaults to 10.0 if omitted
+# - Naming includes both p and alpha: ..._p{p_tag}_alpha{alpha}...
 
 set -euo pipefail
 
@@ -36,64 +41,50 @@ cd "${REPO_ROOT}"
 mkdir -p logs
 mkdir -p outputs
 
-# Path to the parameter list.  You can override via SBATCH argument
+# Path to the parameter list. You can override via SBATCH argument
 # or environment variable PARAM_FILE.
 PARAM_FILE=${1:-param_combinations.txt}
 if [[ ! -f "${PARAM_FILE}" ]]; then
-  echo "Parameter file '${PARAM_FILE}' not found. Please create it with lines of 'strat fl_rounds num_B epochs'." >&2
+  echo "Parameter file '${PARAM_FILE}' not found. Please create it with lines of 'strat fl_rounds num_B epochs [client_p] [dirichlet_alpha]'." >&2
   exit 1
 fi
 
 echo "Reading parameter combinations from ${PARAM_FILE} ..."
 
-# Iterate over each line of the parameter file.  The expected format now includes an optional
-# fifth field specifying the client_p weight.  For example:
-#   federated 3 2 2 1.0
-# If the client_p field is missing or empty, it defaults to 1.0 (equal weighting).
-while read -r strat fl_rounds num_B epochs client_p; do
+# Now supports optional 5th field: client_p and optional 6th field: dirichlet_alpha
+while read -r strat fl_rounds num_B epochs client_p dirichlet_alpha; do
   # Skip empty lines and comments (lines starting with '#').
   [[ -z "${strat}" || "${strat}" =~ ^# ]] && continue
 
-  # Determine the number of clients.  Centralized experiments run with
-  # a single client.  Both federated and FEDIT experiments use two
-  # clients by default, since FEDIT is a variant of federated learning
-  # where all LoRA adapters are jointly tuned.  If your training
-  # launcher allows a different number of clients for FEDIT, adjust
-  # this logic accordingly.
+  # Determine the number of clients.
   clients=1
   if [[ "${strat}" == "federated" || "${strat}" == "fedit" ]]; then
-    clients=2
+    clients=4
   fi
 
-  # Default client_p if none provided.  For centralized runs (clients=1) this is ignored.
+  # Defaults if not provided.
   if [[ -z "${client_p}" ]]; then
     client_p="1.0"
+  fi
+  if [[ -z "${dirichlet_alpha}" ]]; then
+    dirichlet_alpha="10.0"
   fi
 
   # Sanitize client_p for use in directory names (replace '.' with '_').
   p_tag=$(echo "${client_p}" | sed 's/\./_/g')
 
-  # Derive a unique experiment prefix based on the current parameters.  Include
-  # the p_tag to distinguish runs with different client_p values.
-  exp_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${fl_rounds}_numB${num_B}_p${p_tag}"
-  outdir="outputs/${exp_prefix}_newclienP" 
+  # Include dirichlet alpha in naming EXACTLY as requested: _alphaX.X
+  exp_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${fl_rounds}_numB${num_B}_p${p_tag}_alpha${dirichlet_alpha}_4Clients"
+  outdir="outputs/${exp_prefix}_newclienP"
   logfile_out="logs/${exp_prefix}_newclienP.out"
   logfile_err="logs/${exp_prefix}_newclienP.err"
 
-  # Create the experiment output directory and log files directories.
   mkdir -p "${outdir}" logs
 
-  echo "Starting experiment: strat=${strat}, epochs=${epochs}, fl_rounds=${fl_rounds}, num_B=${num_B}" | tee -a "${logfile_out}"
+  echo "Starting experiment: strat=${strat}, epochs=${epochs}, fl_rounds=${fl_rounds}, num_B=${num_B}, client_p=${client_p}, dirichlet_alpha=${dirichlet_alpha}" \
+    | tee -a "${logfile_out}"
 
-  # Invoke the top‑level training launcher.  We pass extra flags to override
-  # the defaults defined in train_tinyllama_mtl_mlora.sh.  The training
-  # output is redirected into per‑run log files.
-  #
-  # Note: --epochs, --num_B and --num_fl_rounds override the defaults.  For
-  # federated runs we also set --strat to 'federated'; for centralized
-  # runs we explicitly set --strat to 'centralized' to override any default.
-  # The --client_p argument overrides the automatic client weighting in the
-  # Python training script (if provided).
+  # Invoke the top-level training launcher with overrides, including --dirichlet_alpha.
   bash train_tinyllama_mtl_mlora.sh "${outdir}" \
        --epochs "${epochs}" \
        --num_B "${num_B}" \
@@ -101,6 +92,7 @@ while read -r strat fl_rounds num_B epochs client_p; do
        --num_clients "${clients}" \
        --strat "${strat}" \
        --client_p "${client_p}" \
+       --dirichlet_alpha "${dirichlet_alpha}" \
        > "${logfile_out}" 2> "${logfile_err}"
 
   echo "Finished experiment: ${exp_prefix}" | tee -a "${logfile_out}"
