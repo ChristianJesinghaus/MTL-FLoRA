@@ -181,9 +181,7 @@ def build_dataloaders(
 
         label_names = extract_label_names_from_dataset(ds_dict, task)
 
-        # -----------------
         # Train
-        # -----------------
         train_ds = ds_dict["train"].shuffle(seed=seed).map(tokenize_fn(task), batched=True)
 
         keep_cols = ["input_ids", "attention_mask", "label"]
@@ -281,9 +279,7 @@ def build_dataloaders(
                 collate_fn=make_collate_fn(task, include_meta=False),
             )
 
-            # -----------------
             # Validation
-            # -----------------
             val_loaders: List[Tuple[str, DataLoader]] = []
 
             def make_val_loader(split_name: str):

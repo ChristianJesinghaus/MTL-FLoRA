@@ -1,7 +1,6 @@
 from collections import defaultdict
 import torch
 
-#TODO: Integreate weights per clients
 def aggregate_A_matrix(result, layer, layer_param, weights_dict):
     lora_param = "lora_A"
     A_blocks = []
@@ -250,7 +249,6 @@ def convert_result_to_dict(result): # TODO refactor: return dict instead of List
     return client_dicts
 
 
-# TODO: Set correct weights per clients
 def aggregate_lora_parameters(client_weights, weights_dict={ "client_1": 0.6, "client_2": 0.4 }):
 
     zipped_client_layers = []
