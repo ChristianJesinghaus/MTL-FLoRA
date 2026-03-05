@@ -39,7 +39,7 @@ ARGS=(
   --num_workers 2
 
   # Final LoRA rank after one FL round with two clients: 8 * 2 = 16
-  --lora_r 16
+  --lora_r 8
   --lora_alpha 16
   --lora_dropout 0.05
 

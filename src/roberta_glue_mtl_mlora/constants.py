@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-# -----------------------------
 # GLUE task metadata
-# -----------------------------
 
 GLUE_TASKS: List[str] = [
     #"cola",
     "sst2",
     "mrpc",
-    "qqp",
-    "mnli",
+#    "qqp",
+#    "mnli",
 #    "qnli",
 #    "rte",
 #    "stsb",

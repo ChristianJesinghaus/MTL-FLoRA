@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
-"""Eval‑only runner for TinyLlama + (MTL-)mLoRA on GLUE (single GPU).
+"""Eval‑only runner for TinyLlama + (MTL-)mLoRA on GLUE .
 
 This script loads a fine‑tuned TinyLlama mLoRA model and evaluates it on
 all GLUE tasks.  It can load either a full checkpoint
 (`ckpt_*.pt`) or separate adapter/head state files.  The mLoRA
 hyperparameters passed here must match those used during training.
-
-This version includes a fix for the Softmax normalisation of the mLoRA B
-weights: after loading the model, the `block_size` attribute is set on
-each mLoRALinear layer so that the softmax is computed separately within
-each client's block of B adapters. Without this fix, the softmax would
-normalise over all concatenated B adapters and produce incorrect
-logits on aggregated models.
 """
 
 from __future__ import annotations
