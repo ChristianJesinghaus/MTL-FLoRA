@@ -87,19 +87,11 @@ The table below summarizes GLUE validation results (MRPC and SST-2) for Approach
 
 <!-- ===== Figures (placed at the bottom of the README) ===== -->
 
-## Figures
-
 <div align="center">
-  <img src="figs/figure_1.png" alt="Figure 1" width="800" />
+<img src="mrpc_vs_sst2_IID(1).png" alt="Figure 1" width="48%" />  
+    <img src="mrpc_vs_sst2_nonIID(1).png" alt="Figure 2 " width="48%" />
+
 </div>
-
-</br>
-
-<div align="center">
-  <img src="figs/figure_2.png" alt="Figure 2 " width="800" />
-</div>
-
-</br>
 
 <!-- ===== Acknowledgements (mentioning original MTL-LoRA) ===== -->
 
