@@ -1,17 +1,7 @@
 #!/usr/bin/env python3
 """Train RoBERTa + (MTL-)mLoRA on multi-task GLUE (SINGLE GPU).
 
-This is the single-GPU refactor of the monolithic DDP script.
-- no torch.distributed
-- no DDP / torchrun
-- keeps GLUE disk caching and the same evaluation prompts (unchanged)
-- trains: LoRA params + task heads + (optionally) all bias + all LayerNorm
 
-Outputs (in --output_dir):
-- checkpoints/ckpt_*.pt
-- adapter_state*.pt (trainable encoder params: LoRA (+bias/LN if enabled))
-- heads_state*.pt
-- eval_latest.json / eval_epoch_*.json
 """
 
 from __future__ import annotations

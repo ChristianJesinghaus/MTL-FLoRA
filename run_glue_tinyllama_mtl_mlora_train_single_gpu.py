@@ -50,9 +50,7 @@ except Exception:
     _mLoRALinear = None  # type: ignore
 
 
-###############################################################################
 # Federated Averaging helpers
-###############################################################################
 
 def fed_avg(client_weights: List[Dict[str, torch.Tensor]]) -> Dict[str, torch.Tensor]:
     """Average LoRA weight dictionaries across clients (simple mean)."""
@@ -91,9 +89,8 @@ def fed_avg_heads(client_heads: List[Dict[str, torch.Tensor]], client_p: List[fl
     return avg
 
 
-###############################################################################
+
 # Existing (exponential) FLoRA stacking aggregation functions
-###############################################################################
 
 def stack_A(client_A: List[Dict[str, torch.Tensor]], client_p: List[float], hidden: int, lora_r: int) -> Dict[str, torch.Tensor]:
     """Stack A matrices from clients along the LoRA rank dimension with weighting."""
@@ -186,9 +183,9 @@ def aggregate_mtl_weights(
     return {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_stacked}
 
 
-###############################################################################
+
 # New: linear_freeze helpers (freeze prefix + append-only growth)
-###############################################################################
+
 
 def _set_block_size(model: torch.nn.Module, block_size: int) -> None:
     """Set block_size on all mLoRALinear layers (enables blockwise softmax per block)."""
@@ -352,9 +349,9 @@ def aggregate_mtl_weights_linear_freeze(
     return out
 
 
-###############################################################################
+
 # Model update utilities
-###############################################################################
+
 
 def update_global_model(global_model: torch.nn.Module, avg_weights: Dict[str, torch.Tensor]) -> None:
     """Copy aggregated LoRA weights into the global model (in-place)."""
@@ -399,9 +396,8 @@ def transfer_non_lora_params(old_model: torch.nn.Module, new_model: torch.nn.Mod
     return params_transferred
 
 
-###############################################################################
+
 # Args / parsing
-###############################################################################
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Train TinyLlama + mLoRA on multi-task GLUE (single GPU)")
@@ -500,9 +496,8 @@ def parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-###############################################################################
+
 # Client fine-tuning
-###############################################################################
 
 def fine_tune_client(
     model: torch.nn.Module,
@@ -537,9 +532,6 @@ def fine_tune_client(
     return _extract_lora_weights(model)
 
 
-###############################################################################
-# Main
-###############################################################################
 
 def main() -> None:
     args = parse_args()
