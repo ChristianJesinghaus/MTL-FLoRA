@@ -10,7 +10,9 @@ We present **MTL-FLoRA**, a federated extension of **MTL-LoRA** that enables eff
 
 - **Approach II — Scalar-weighted stacking:** Stacks client parameters into disjoint rank blocks and performs block-wise normalization with *scalar* mixture weights. This strategy is more resource-efficient and, according to our experiments, achieves the best results on TinyLlama under both IID and non-IID splits.
 
-The main branch of this repository implements **Approach II** on the [TinyLlama-1.1B-Chat-v1.0](https://huggingface.co/johnsnowlabs/tinyllama-1.1b-Chat-v1.0) causal language model. All paper experiments for this approach (excluding the `freeze-R` ablation) are included. Freeze-R and RoBERTa results live on separate branches and can be reviewed manually.
+The main branch of this repository implements **Approach II** on the [TinyLlama-1.1B-Chat-v1.0](https://huggingface.co/johnsnowlabs/tinyllama-1.1b-Chat-v1.0) causal language model. All paper experiments for this approach (excluding the `freeze-R` ablation) are included. Freeze-R and RoBERTa results live on separate branches and can be reviewed manually. Freeze-R can be found on the "freezeR" branch.
+
+The figure below shows the architecture of approach I. For additional information about the second approach review the paper, which can be found in the repository. 
 
 <div style="align: center;">
   <img width="482" height="477" alt="image" src="https://github.com/user-attachments/assets/f8f5a733-2a29-44e6-86b9-35e8ce445a40" />
