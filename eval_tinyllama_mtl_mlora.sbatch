@@ -1,18 +1,8 @@
 #!/bin/bash
 ##
-## Automatic evaluation of TinyLlama mLoRA federated experiments.
+## Automatic evaluation of TinyLlama mLoRA freezeR experiments.
+## Hard-coded for linear_freeze: lora_r=8, num_B stays at training value.
 ##
-## This Slurm job reads the parameter combinations used for training and
-## performs evaluation of the corresponding global models for the
-## federated runs.  For each entry in the parameter file where the
-## strategy is "federated", it constructs the appropriate training
-## prefix, derives the matching evaluation prefix (using "eval" in
-## place of "train"), computes the global LoRA hyperparameters based
-## on the local settings and number of clients, and then invokes the
-## existing evaluation shell script (`eval_tinyllama_mtl_mlora.sh`).  The
-## evaluation outputs and logs are stored in directories and files
-## whose names mirror those used during training, suffixed with
-## "eval" for clarity.
 
 #SBATCH --job-name=tinyllama_mtl_eval_auto
 #SBATCH --output=logs/tinyllama_mtl_eval_auto_%j.out
@@ -27,129 +17,147 @@
 
 set -euo pipefail
 
-# The directory from which the job was submitted.  All relative paths
-# are resolved relative to this repository root.
-REPO_ROOT="${SLURM_SUBMIT_DIR}"
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$(pwd)}"
 cd "${REPO_ROOT}"
 
-# Parameter combinations file.  If a filename is provided as the first
-# positional argument, use it; otherwise fall back to the default
-# param_combinations.txt in the repository root.
 PARAM_FILE="${1:-param_combinations.txt}"
+PARAM_FILE="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "${PARAM_FILE}")"
 
-# Verify that the parameter file exists.
 if [[ ! -f "${PARAM_FILE}" ]]; then
   echo "Parameter file ${PARAM_FILE} not found." >&2
   exit 1
 fi
 
-## Configuration for federated evaluations
-# Number of clients in federated experiments.  The global LoRA rank
-# equals LOCAL_R * NUM_CLIENTS, and the global number of B matrices
-# equals num_B * NUM_CLIENTS.
-NUM_CLIENTS=2
-# Local LoRA rank used during training.  If you change the rank in
-# training, adjust this value accordingly.
+## Config – these match train_tinyllama_mtl_mlora.sh defaults
 LOCAL_R=8
-# LoRA alpha hyperparameter (assumed constant across runs).  If you
-# modify this in training, adjust here as well.
 LORA_ALPHA=16
+NUM_CLIENTS=4
 
-echo "Evaluating federated experiments from ${PARAM_FILE}..."
-echo "Using local rank ${LOCAL_R}, clients ${NUM_CLIENTS}, alpha ${LORA_ALPHA}"
+echo "Evaluating freezeR experiments from ${PARAM_FILE}..."
 
-# Ensure the logs directory exists.  Individual evaluations will
-# allocate their own output directories under outputs/ and log files
-# under logs/.
-mkdir -p logs
+mkdir -p "${REPO_ROOT}/logs"
+mkdir -p "${REPO_ROOT}/outputs"
 
-# Iterate over each line in the parameter file.  Lines beginning with
-# '#' or blank lines are ignored.  Each non-comment line is expected
-# to have five whitespace-separated fields: strat num_fl_rounds num_B
-# epochs client_p.  If the last field is omitted, a default of 1.0 is assumed.
+pick_first_existing_file() {
+  for f in "$@"; do
+    if [[ -f "$f" ]]; then
+      echo "$f"
+      return 0
+    fi
+  done
+  return 1
+}
+
 while read -r strat rounds num_B epochs client_p; do
-  # Skip empty lines and comments.
-  [[ -z "${strat}" || "${strat}" =~ ^# ]] && continue
+  [[ -z "${strat:-}" || "${strat}" =~ ^# ]] && continue
+  [[ "${strat}" != "federated" && "${strat}" != "fedit" ]] && continue
 
-  # Only handle federated and FEDIT runs; centralized runs have no
-  # global model separate from the local one and are therefore not
-  # evaluated here.  For FEDIT (where existing adapters are further
-  # trained instead of freezing them), the global rank does not grow
-  # with the number of rounds.
-  if [[ "${strat}" != "federated" && "${strat}" != "fedit" ]]; then
-    continue
-  fi
-
-  # Default client_p to 1.0 if not provided.  Sanitize for use in path names by
-  # replacing decimal points with underscores.  This tag must match the
-  # corresponding suffix used during training so that the evaluation picks up
-  # the correct model directory.  When the parameter file includes a
-  # fifth column, it specifies the client_p value used for training; otherwise
-  # we assume p=1.0 (uniform weighting).
   client_p=${client_p:-1.0}
   p_tag=$(echo "${client_p}" | sed 's/\./_/g')
 
-  # Build the training and evaluation prefixes.  The training prefix
-  # matches the naming used in train_tinyllama_mtl_mlora_auto.sbatch,
-  # including the p_tag suffix.  The evaluation prefix mirrors this but
-  # uses "eval" instead of "train" to differentiate outputs.
-  train_prefix="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
-  eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}"
+  # Try both naming conventions for train dir
+  train_prefix_new="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}_4Clients_freezeR"
+  train_prefix_old="tinyllama_train_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}_4Clients_freezeR"
 
-  # Determine paths for the model checkpoint to evaluate, the output
-  # directory for evaluation results, and the log files capturing
-  # stdout and stderr.  The evaluation script expects the global
-  # checkpoint to reside in a 'checkpoints' subdirectory inside the
-  # training output directory.  If your training script stores the
-  # best checkpoint elsewhere, adjust the load_dir accordingly.
-  load_dir="${REPO_ROOT}/outputs/${train_prefix}/checkpoints/ckpt_best"
+  eval_prefix="tinyllama_eval_${strat}_epoch${epochs}_flround${rounds}_numB${num_B}_p${p_tag}_4Clients_freezeR"
+
+  # Find the training directory (try new naming first, then old)
+  train_dir=""
+  for candidate in "${REPO_ROOT}/outputs/${train_prefix_new}" "${REPO_ROOT}/outputs/${train_prefix_old}"; do
+    if [[ -d "${candidate}" ]]; then
+      train_dir="${candidate}"
+      break
+    fi
+  done
+
+  if [[ -z "${train_dir}" ]]; then
+    echo "[WARN] Train dir not found for: ${train_prefix_new} or ${train_prefix_old} (skipping)" >&2
+    continue
+  fi
+
   out_dir="${REPO_ROOT}/outputs/${eval_prefix}"
   logfile_out="${REPO_ROOT}/logs/${eval_prefix}.out"
   logfile_err="${REPO_ROOT}/logs/${eval_prefix}.err"
 
-  # Report progress on the job's stderr/stdout.  These messages
-  # provide a high-level overview of what the script is doing but do
-  # not include the full evaluation output, which goes to the
-  # per-run log files.
-  echo "------------------------------------------"
-  echo "Evaluating ${train_prefix} -> ${eval_prefix}"
-  echo "Loading model from ${load_dir}"
-  echo "Writing evaluation results to ${out_dir}"
-  echo "Capturing stdout to ${logfile_out} and stderr to ${logfile_err}"
-
-  # Compute the global LoRA hyperparameters.  For standard federated
-  # runs, each round introduces a new set of LoRA weights per client,
-  # so the global rank and number of B matrices grow linearly with
-  # rounds (LOCAL_R * NUM_CLIENTS * rounds).  In FEDIT, all LoRA
-  # adapters are jointly trained across rounds, so the rank does not
-  # accumulate across rounds – it stays LOCAL_R * NUM_CLIENTS.  In
-  # both cases the block size equals the local B count.
-  local_B="${num_B}"
-  if [[ "${strat}" == "federated" ]]; then
-    global_r=$((LOCAL_R * NUM_CLIENTS * rounds))
-    global_B=$((num_B * NUM_CLIENTS * rounds))
+  load_path=""
+  if load_path="$(pick_first_existing_file \
+      "${train_dir}/checkpoints/ckpt_global_final.pt" \
+      "${train_dir}/checkpoints/ckpt_global_best.pt" \
+      "${train_dir}/checkpoints/ckpt_best.pt" \
+      "${train_dir}/checkpoints/ckpt_last.pt" \
+    )"; then
+    :
   else
-    # FEDIT case
-    global_r=$((LOCAL_R * NUM_CLIENTS))
-    global_B=$((num_B * NUM_CLIENTS))
+    if [[ -f "${train_dir}/adapter_state.pt" && -f "${train_dir}/heads_state.pt" ]]; then
+      load_path="${train_dir}"
+    else
+      echo "[WARN] No usable checkpoint in: ${train_dir} (skipping)" >&2
+      continue
+    fi
   fi
-  block_size="${num_B}"
 
-  # Ensure the evaluation output directory exists.
+  # ─── Compute eval dimensions matching what the training script saved ───
+  #
+  # freezeR / linear_freeze (federated, round > 0):
+  #   Per round: each of K clients adds add_r=LOCAL_R rank and add_B=num_B B-matrices
+  #   After R rounds (round 0 is exponential, rounds 1..R-1 are linear_freeze):
+  #     Round 0 (exponential): r = LOCAL_R * K,  B = num_B * K
+  #     Round 1 (linear):      r += K * LOCAL_R, B += K * num_B
+  #     ...
+  #     Round R-1 (linear):    r += K * LOCAL_R, B += K * num_B
+  #   Total: r = LOCAL_R*K + (R-1)*K*LOCAL_R = K*LOCAL_R*R
+  #          B = num_B*K   + (R-1)*K*num_B   = K*num_B*R
+  #
+  # fedit: simple FedAvg, no stacking at all
+  #   r = LOCAL_R, B = num_B (always)
+  #
+  # For freezeR with only 1 round: round 0 is exponential
+  #   r = LOCAL_R * K, B = num_B * K
+
+  if [[ "${strat}" == "fedit" ]]; then
+    # FedIT: no stacking, dimensions stay local
+    eval_r="${LOCAL_R}"
+    eval_num_B="${num_B}"
+    eval_global_num_B="${num_B}"
+    eval_block_size="${num_B}"
+  elif [[ "${strat}" == "federated" ]]; then
+    # FLoRA with linear_freeze
+    # Round 0 always does exponential stacking: r*K, B*K
+    # Rounds 1..R-1 do linear_freeze: each adds K*add_r, K*add_B
+    #
+    # But looking at the training code more carefully:
+    #   - do_linear_freeze is only True when round_idx > 0
+    #   - Round 0: exponential -> r = LOCAL_R * K, B = num_B * K
+    #   - Round 1+: linear_freeze -> r += K * LOCAL_R, B += K * num_B per round
+    #
+    # Total after R rounds:
+    #   r = LOCAL_R * K  +  (R-1) * K * LOCAL_R = K * LOCAL_R * R
+    #   B = num_B  * K   +  (R-1) * K * num_B   = K * num_B  * R
+
+    eval_r=$(( NUM_CLIENTS * LOCAL_R * rounds ))
+    eval_global_num_B=$(( NUM_CLIENTS * num_B * rounds ))
+    eval_num_B="${num_B}"
+    eval_block_size="${num_B}"
+  fi
+
+  echo "------------------------------------------"
+  echo "Evaluating: strat=${strat} epochs=${epochs} rounds=${rounds} numB=${num_B} p=${client_p}"
+  echo "  Train dir:    ${train_dir}"
+  echo "  Load:         ${load_path}"
+  echo "  lora_r:       ${eval_r}"
+  echo "  num_B:        ${eval_num_B}"
+  echo "  global_num_B: ${eval_global_num_B}"
+  echo "  block_size:   ${eval_block_size}"
+
   mkdir -p "${out_dir}"
 
-  # Launch the evaluation script.  We explicitly pass the computed
-  # hyperparameters so that the evaluation uses the correct global
-  # settings.  The evaluation output and errors are redirected to the
-  # per-run log files for later inspection.  Additional flags can
-  # easily be appended here.
-  bash eval_tinyllama_mtl_mlora.sh "${load_dir}" "${out_dir}" \
-    --lora_r "${global_r}" \
+  bash "${REPO_ROOT}/eval_tinyllama_mtl_mlora.sh" "${load_path}" "${out_dir}" \
+    --lora_r "${eval_r}" \
     --lora_alpha "${LORA_ALPHA}" \
-    --num_B "${local_B}" \
-    --global_num_B "${global_B}" \
-    --block_size "${block_size}" \
+    --num_B "${eval_num_B}" \
+    --global_num_B "${eval_global_num_B}" \
+    --block_size "${eval_block_size}" \
     > "${logfile_out}" 2> "${logfile_err}"
 
-  echo "Finished evaluation for ${train_prefix}."
+  echo "Finished: ${eval_prefix}"
 done < "${PARAM_FILE}"

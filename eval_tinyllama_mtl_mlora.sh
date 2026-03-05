@@ -1,66 +1,76 @@
 #!/usr/bin/env bash
 #
-# Top-level launcher for evaluating a TinyLlama multi‑task mLoRA model.
+# Top-level launcher for evaluating a TinyLlama multi-task mLoRA model.
 #
-# This script runs the evaluation Python program inside the Apptainer
-# container via `run_in_container`.  It accepts two optional
-# positional arguments: the directory containing your trained model
-# (`LOAD_DIR`) and the output directory for evaluation results
-# (`OUT_DIR`).  If omitted, reasonable defaults are provided.
-# Additional flags override the default evaluation settings below.
+# Usage:
+#   bash eval_tinyllama_mtl_mlora.sh <LOAD_PATH> <OUT_DIR> [extra args...]
+#
+# LOAD_PATH can be either:
+#   - a checkpoint file (*.pt)  -> passed as --load_ckpt
+#   - a directory with adapter_state.pt + heads_state.pt -> passed as --load_dir
+#
 
 set -euo pipefail
 
-# Determine the repository root (the directory containing this script).
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "${REPO_DIR}"
 
-# Parse positional arguments
-LOAD_DIR="${1:-./outputs_tinyllama_train/checkpoints/ckpt_best}"
+# Positional args
+LOAD_PATH="${1:-./outputs_tinyllama_train}"
 OUT_DIR="${2:-./outputs_tinyllama_eval}"
 shift 2 || true
 EXTRA_ARGS=("$@")
 
-# Load container/env helpers
-source script/common_env.sh
+# Make absolute paths
+abspath() {
+  python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$1"
+}
+LOAD_PATH="$(abspath "${LOAD_PATH}")"
+OUT_DIR="$(abspath "${OUT_DIR}")"
 
-# Ensure output directory exists
+# Decide whether to use --load_ckpt or --load_dir
+LOAD_ARGS=()
+if [[ -f "${LOAD_PATH}" ]]; then
+  LOAD_ARGS=(--load_ckpt "${LOAD_PATH}")
+elif [[ -d "${LOAD_PATH}" ]]; then
+  LOAD_ARGS=(--load_dir "${LOAD_PATH}")
+else
+  echo "[ERR] LOAD_PATH does not exist: ${LOAD_PATH}" >&2
+  exit 1
+fi
+
+# Load container/env helpers
+source "${REPO_DIR}/script/common_env.sh"
+
 mkdir -p "${OUT_DIR}"
 
-# Python evaluation script
 SCRIPT="run_glue_tinyllama_mtl_mlora_eval_single_gpu.py"
 
-# Base arguments (must match *global* LoRA hyperparameters for the trained model)
+# Base args – NO lora_r / num_B / global_num_B / block_size defaults here!
+# These MUST come from EXTRA_ARGS so there's no risk of wrong defaults winning.
 ARGS=(
   --output_dir "${OUT_DIR}"
-  --load_dir "${LOAD_DIR}"
+  "${LOAD_ARGS[@]}"
+
   --eval_batch_size 16
   --max_length 256
   --num_workers 2
 
-  # Final LoRA rank after one FL round with two clients: 8 * 2 = 16
-  --lora_r 16
   --lora_alpha 16
   --lora_dropout 0.05
-
-  # Local number of B matrices per client and derived global number of B matrices
-  --num_B 3
-  --global_num_B 6
-  # Softmax block size corresponds to local num_B
-  --block_size 3
 
   --temperature 0.1
   --fp16
 
   --save_eval_details
-  #--eval_details_max_examples 200
 )
 
-# Append extra CLI args (override defaults if duplicated)
+# Append extra CLI args (these now SET lora_r, num_B, global_num_B, block_size)
 ARGS+=("${EXTRA_ARGS[@]}")
 
-# Build and run command inside container
 CMD=(python3 -u "${SCRIPT}" "${ARGS[@]}")
 CMD_STR="$(printf '%q ' "${CMD[@]}")"
+
+echo "[RUN] CMD=${CMD_STR}"
 
 run_in_container "${CMD_STR}"
