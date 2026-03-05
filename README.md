@@ -1,6 +1,7 @@
 <h1 align="center"> MTL-FLoRA: Federated Low-Rank Adaptation<br/>for Multi-Task Learning </h1>
 
-<h5 align="center"><em>Christian Jesinghaus, Joshua Heitbreder, Julia Köpp</em></h5>
+<h5 align="center"><em>Christian Jesinghaus, Joshua Heitbreder, Julia Köpp</em>
+</h5>
 </br>
 
 ## Introduction
@@ -94,7 +95,7 @@ The table below summarizes GLUE validation results (MRPC and SST-2) for Approach
     <img src="mrpc_vs_sst2_nonIID(1).png" alt="Figure 2 " width="48%" />
 
 </div>
-
+(see MTL-FLoRA Paper in the repository for further information)
 <!-- ===== Acknowledgements (mentioning original MTL-LoRA) ===== -->
 
 ## Acknowledgements
