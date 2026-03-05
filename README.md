@@ -45,7 +45,7 @@ The scripts download models and datasets from the HuggingFace Hub. Set your toke
 
 ### Run TinyLlama Experiments (Approach II)
 
-Training and evaluation are controlled via shell scripts in the `script/` directory. For TinyLlama, the main script runs federated training with block-wise stacking (Approach II):
+Training and evaluation are controlled via shell scripts in the repo. For TinyLlama, the main script runs federated training with block-wise stacking (Approach II):
 # Training on MRPC and SST-2 with TinyLlama and Approach II
 ```bash
     train_tinyllama_mtl_mlora.sh \
