@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Train RoBERTa + (MTL-)mLoRA on multi-task GLUE (SINGLE GPU).
+"""Train RoBERTa + (MTL-)mLoRA on multi-task GLUE with stacking Approach I / Ablation (SINGLE GPU).
 
 This is the single-GPU refactor of the monolithic DDP script.
 - no torch.distributed
@@ -144,121 +144,22 @@ def fine_tune_client(model: torch.nn.Module, client_data: dict, device: torch.de
     )
     client_lora_weights = {name: param.detach().cpu().clone() for name, param in model.named_parameters() if 'lora' in name}
     client_heads = {name: param.detach().cpu().clone() for name, param in model.named_parameters() if 'heads' in name}
-    print(f"[DEBUG] fine_tune_client: Extracted {len(client_lora_weights)} LoRA weight matrices")
-    for name, tensor in list(client_lora_weights.items())[:3]:  # Print first 3 for brevity
-        print(f"  {name}: shape={tensor.shape}")
     return client_lora_weights, client_heads
 
 # Federated Averaging function for LoRA weights
 def fed_avg(client_weights):
-    print(f"[DEBUG] fed_avg: Averaging {len(client_weights)} client weight sets")
     avg_weights = copy.deepcopy(client_weights[0])
-    print(f"[DEBUG] fed_avg: Total parameters to average: {len(avg_weights)}")
     for key in avg_weights.keys():
         for i in range(1, len(client_weights)):
             avg_weights[key] += client_weights[i][key]
         avg_weights[key] = avg_weights[key] / len(client_weights)
-    print(f"[DEBUG] fed_avg: Averaged weights (first 3 for brevity)")
-    for name, tensor in list(avg_weights.items())[:3]:
-        print(f"  {name}: shape={tensor.shape}, dtype={tensor.dtype}")
     return avg_weights
 
-def stack_A(client_A, client_p, hidden, lora_r):
-    device = next(iter(client_A[0].values())).device
-    num_clients = len(client_A)
-    
-    stacked = dict()
-    for layer in client_A[0]:
-        stacked[layer] = torch.cat([client_p[i]*client_A[i][layer] for i in range(num_clients)], dim=1).to(device) # stack As along lora_r for each layer
-
-    assert next(iter(stacked.values())).shape==torch.Size([1, lora_r, hidden]), f"As stacked incorrectly: {next(iter(stacked.values())).shape}"
-    return stacked
-
-def stack_B(client_B, num_B, hidden, lora_r):
-    device = next(iter(client_B[0].values())).device
-    num_clients = len(client_B)
-    stacked = dict() #dict.fromkeys(client_B[0], torch.zeros([num_B, hidden, lora_r]))
-    for layer in client_B[0]:
-        stacked[layer] = torch.cat([client_B[i][layer] for i in range(num_clients)], dim=2).to(device) # stack Bs along lora_r for each layer
-    # TODO testing
-    assert next(iter(stacked.values())).shape==torch.Size([num_B, hidden, lora_r]), "Bs stacked incorrectly"
-    return stacked
-
-
-def stack_lambdas(client_lambdas, num_tasks, lora_r):
-    device = next(iter(client_lambdas[0].values())).device
-    dtype = next(iter(client_lambdas[0].values())).dtype
-    num_clients = len(client_lambdas)
-    stacked = dict.fromkeys(client_lambdas[0], torch.zeros([num_tasks, lora_r, lora_r], dtype=dtype))
-
-    for layer in client_lambdas[0]:
-        lambdas = [client_lambdas[i][layer] for i in range(num_clients)]
-        sizes = [l.shape[1] for l in lambdas] # accounting for heterogeneous lora ranks
-        offset = 0
-        for l, r in zip(lambdas, sizes): # stack lambdas diagonally
-            stacked[layer][:, offset:offset+r, offset:offset+r] = l
-            offset += r
-
-    return stacked
-
-def avg_B_w(client_B_w, num_tasks, num_B):
-    num_clients = len(client_B_w)
-    avg = copy.deepcopy(client_B_w[0])
-
-    for layer in client_B_w[0]:
-        for i in range(1, num_clients):
-            avg[layer] += client_B_w[i][layer]
-        avg[layer] = avg[layer] / num_clients
-
-    # Debug: check for any zero or problematic values
-    for name, tensor in list(avg.items())[:2]:
-        print(f"  {name}: shape={tensor.shape}, min={tensor.min():.6f}, max={tensor.max():.6f}, mean={tensor.mean():.6f}, contains_nan={torch.isnan(tensor).any()}")
-    
-    return avg
-
-def aggregate_mtl_weights(client_weights, client_p, hidden=768, num_B=3, num_tasks=2, lora_r=8):
-    client_A = []
-    client_B = []
-    client_lambdas = []
-    client_B_w = []
-
-    for weights in client_weights:
-        client_A.append({k: v for k, v in weights.items() if k.endswith("lora_A")})
-        client_B.append({k: v for k, v in weights.items() if "lora_B" in k and not k.endswith("lora_B_w")})
-        client_lambdas.append({k: v for k, v in weights.items() if k.endswith("lora_lambdas")})
-        client_B_w.append({k: v for k, v in weights.items() if k.endswith("lora_B_w")})
-    
-    print(f"[DEBUG] aggregate_mtl_weights: Found {len(client_A[0])} lora_A, {len(client_B[0])} lora_B, {len(client_lambdas[0])} lora_lambdas, {len(client_B_w[0])} lora_B_w in first client")
-    
-    '''
-    # Sample parameter names for debugging
-    if client_A[0]:
-        print(f"[DEBUG] Sample lora_A names: {list(client_A[0].keys())[:2]}")
-    if client_B[0]:
-        print(f"[DEBUG] Sample lora_B names: {list(client_B[0].keys())[:2]}")
-    if client_lambdas[0]:
-        print(f"[DEBUG] Sample lora_lambdas names: {list(client_lambdas[0].keys())[:2]}")
-    if client_B_w[0]:
-        print(f"[DEBUG] Sample lora_B_w names: {list(client_B_w[0].keys())[:2]}")
-    '''
-
-    a_stacked = stack_A(client_A, client_p, hidden, lora_r)
-    b_stacked = stack_B(client_B, num_B, hidden, lora_r)
-    lambdas_stacked = stack_lambdas(client_lambdas, num_tasks, lora_r)
-    b_w_avg = avg_B_w(client_B_w, num_tasks, num_B)
-
-    agg_weights = {**a_stacked, **b_stacked, **lambdas_stacked, **b_w_avg}
-    print(f"[DEBUG] aggregate_mtl_weights: Created {len(agg_weights)} aggregated weights")
-    
-    return agg_weights
 
 # Apply aggregated weights to global model
 def update_global_model(global_model, avg_weights):
     updated_count = 0
     shape_mismatches = []
-    
-    print(f"[DEBUG] update_global_model: Global model has {len(list(global_model.named_parameters()))} parameters")
-    print(f"[DEBUG] update_global_model: avg_weights has {len(avg_weights)} entries")
     
     with torch.no_grad():
         for name, param in global_model.named_parameters():
@@ -271,7 +172,6 @@ def update_global_model(global_model, avg_weights):
                     param.copy_(weight)
                     updated_count += 1
     
-    print(f"[DEBUG] update_global_model: Updated {updated_count} parameters in global model")
     if shape_mismatches:
         print(f"[ERROR] Found {len(shape_mismatches)} shape mismatches!")
     
@@ -302,59 +202,6 @@ def check_bad_tensors(avg_weights):
     return False
 
 
-def merge_and_expand_lora(global_model, aggregated_weights, old_r, new_r):
-    """
-    Merge aggregated weights into global model while expanding LoRA rank.
-    
-    Instead of just copying aggregated weights, this:
-    1. Takes the global model's current LoRA weights
-    2. Pads them with zeros to the new rank
-    3. Merges in the aggregated weights from all clients
-    
-    This maintains structural coherence during rank expansion.
-    
-    Args:  
-        global_model: Current global model with old rank
-        aggregated_weights: Stacked/aggregated weights from clients
-        old_r: Current LoRA rank
-        new_r: New (expanded) LoRA rank
-        
-    Returns:
-        Dict of merged weights ready to use in new model
-    """
-    old_state = global_model.state_dict()
-    merged = {}
-    
-    device = next(iter(aggregated_weights.values())).device
-    dtype = next(iter(aggregated_weights.values())).dtype
-    
-    for name, tensor in aggregated_weights.items():
-        if "lora_A" in name:
-            # For A: (1, new_r, in_feat) - aggregated already has new_r
-            # Use the aggregated version (stacked from clients)
-            merged[name] = tensor.to(device=device, dtype=dtype)
-            print(f"[DEBUG] Using stacked lora_A: {name} shape={tensor.shape}")
-            
-        elif "lora_B" in name and "lora_B_w" not in name:
-            # For B: (num_B, out_feat, new_r) - aggregated already has new_r
-            # Use the aggregated version (stacked from clients)
-            merged[name] = tensor.to(device=device, dtype=dtype)
-            print(f"[DEBUG] Using stacked lora_B: {name} shape={tensor.shape}")
-            
-        elif "lora_lambdas" in name:
-            # For lambdas: (num_tasks, new_r, new_r) - aggregated has diagonally stacked version
-            # The aggregated version places client lambdas diagonally
-            # Use as-is since this preserves per-client task-specific decisions
-            merged[name] = tensor.to(device=device, dtype=dtype)
-            print(f"[DEBUG] Using stacked lora_lambdas: {name} shape={tensor.shape}")
-            
-        else:
-            # For other parameters like lora_B_w: use as-is
-            merged[name] = tensor.to(device=device, dtype=dtype)
-    
-    return merged
-
-
 def transfer_non_lora_params(old_model, new_model, round_num=None):
     """
     Transfer non-LoRA parameters from old model to new model.
@@ -383,10 +230,7 @@ def transfer_non_lora_params(old_model, new_model, round_num=None):
                 round_str = f" (FL round {round_num})" if round_num is not None else ""
                 print(f"[WARNING] Shape mismatch for {name}{round_str}: old={param.shape}, new={new_state_dict[name].shape}")
     
-    new_model.load_state_dict(new_state_dict)
-    round_str = f" in FL round {round_num}" if round_num is not None else ""
-    print(f"[DEBUG] Transferred {params_transferred} non-LoRA parameters{round_str}")
-    
+    new_model.load_state_dict(new_state_dict)    
     return params_transferred
 
 
@@ -472,9 +316,6 @@ def main() -> None:
             client_model = copy.deepcopy(global_model)
             client_data = task_data[client_id]
             client_lora_weights, client_task_heads = fine_tune_client(client_model, client_data, device, args, use_amp)
-            print(f"[DEBUG] FL round {round+1}: Client {client_id+1} returned {len(client_lora_weights)} LoRA matrices")
-            for name, tensor in list(client_lora_weights.items())[:2]:
-                print(f"  {name}: shape={tensor.shape}, min={tensor.min():.6f}, max={tensor.max():.6f}, mean={tensor.mean():.6f}")
             client_weights.append(client_lora_weights)
             client_heads.append(client_task_heads)
         
@@ -483,26 +324,15 @@ def main() -> None:
     
         avg_weights = dict()
         avg_heads = dict()
-        #avg_weights = fed_avg(client_weights)
-        #avg_weights = client_weights[0]
+
         if args.strat == "fedit":
-            avg_weights = fed_avg(client_weights)
+            avg_weights = average_mtl_weights(client_weights)
             avg_heads = fed_avg(client_heads)
         elif args.strat == "centralized":
             avg_weights = client_weights[0]
             avg_heads = client_heads[0]
         else: # default to FLoRA
             flora_r *= args.num_clients
-            '''
-            avg_weights = aggregate_mtl_weights(
-                client_weights, 
-                client_p=[1.0/args.num_clients] * args.num_clients,
-                hidden=768,  # RoBERTa-base hidden size
-                num_B=args.num_B,
-                num_tasks=len(GLUE_TASKS),
-                lora_r=flora_r 
-            )
-            '''
             avg_weights = aggregate_lora_parameters(client_weights)
             avg_heads = fed_avg(client_heads)
 
@@ -522,24 +352,16 @@ def main() -> None:
         transfer_non_lora_params(global_model, new_global_model, round_num=round+1)
         
         # Update global model with aggregated LoRA weights
-        print(f"[DEBUG] FL round {round+1}: Updating global model with aggregated LoRA weights")
         update_global_model(new_global_model, {**avg_weights, **avg_heads})
         
         # Ensure trainable params are set correctly for the new model
         set_trainable_params(new_global_model, train_bias=train_bias, train_layernorm=train_ln)
         cast_trainable_params_to_fp32(new_global_model)
         
-        # Debug: Verify updated weights
-        print(f"[DEBUG] FL round {round+1}: Updated model weights stats:")
-        for name, param in list(new_global_model.named_parameters()):
-            if 'lora' in name and 'lora_A' in name:
-                print(f"  {name}: shape={param.shape}, min={param.min():.6f}, max={param.max():.6f}, mean={param.mean():.6f}")
-                break
-        
         # Replace global model reference and update current rank
         global_model = new_global_model
 
-        #evaluate global model
+        #evaluate global model (optional during training)
         results = evaluate(
             model=global_model,
             task_data=task_data[0],

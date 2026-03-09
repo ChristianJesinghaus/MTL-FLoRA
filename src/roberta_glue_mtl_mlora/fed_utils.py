@@ -1,6 +1,9 @@
 from collections import defaultdict
 import torch
 
+'''
+Utility functions for stacking Approach I
+'''
 
 def aggregate_A_matrix(client_matrices, weights_dict):
     """Stack A matrices along dim 1 with weights."""
