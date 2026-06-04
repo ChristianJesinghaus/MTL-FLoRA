@@ -1,6 +1,6 @@
 <h1 align="center"> MTL-FLoRA: Federated Low-Rank Adaptation<br/>for Multi-Task Learning </h1>
 
-<h5 align="center"><em>Christian Jesinghaus, Joshua Heitbreder, Julia Köpp</em>
+<h5 align="center"><em>Authors redacted for double blind</em>
 </h5>
 </br>
 
